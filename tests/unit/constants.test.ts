@@ -18,7 +18,7 @@ describe("constants", () => {
     });
 
     it("every template has required fields", () => {
-      for (const [key, tpl] of Object.entries(RULE_TEMPLATES)) {
+      for (const tpl of Object.values(RULE_TEMPLATES)) {
         expect(tpl.name).toBeTruthy();
         expect(tpl.expression).toBeTruthy();
         expect(tpl.action).toBeTruthy();
