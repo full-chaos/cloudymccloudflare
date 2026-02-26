@@ -1,17 +1,18 @@
 # CloudlyMcCloudFlare
 
 Multi-zone Cloudflare management dashboard. Manage DNS records, WAF/security rules, and zone groups across all your domains from a single interface.
+
 <img width="1031" height="753" alt="Safari 2026-02-26 13 20 45" src="https://github.com/user-attachments/assets/29269fe2-df79-4924-9f0a-408991734f7a" />
 
 ## Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19, Tailwind CSS 3, Vite 6 |
-| Backend | Hono (Cloudflare Workers), Drizzle ORM |
-| Database | Cloudflare D1 (SQLite) |
-| Runtime | Cloudflare Workers (prod), Miniflare (dev) |
-| API | Cloudflare API v4 |
+| Layer    | Technology                                 |
+| -------- | ------------------------------------------ |
+| Frontend | React 19, Tailwind CSS 3, Vite 6           |
+| Backend  | Hono (Cloudflare Workers), Drizzle ORM     |
+| Database | Cloudflare D1 (SQLite)                     |
+| Runtime  | Cloudflare Workers (prod), Miniflare (dev) |
+| API      | Cloudflare API v4                          |
 
 ## Prerequisites
 
@@ -45,13 +46,13 @@ npm run dev
 
 Create a token at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) with these permissions:
 
-| Permission | Access |
-|-----------|--------|
-| Zone | Read |
-| DNS | Read + Edit |
-| Zone Settings | Read + Edit |
+| Permission        | Access      |
+| ----------------- | ----------- |
+| Zone              | Read        |
+| DNS               | Read + Edit |
+| Zone Settings     | Read + Edit |
 | Firewall Services | Read + Edit |
-| Zone WAF | Read + Edit |
+| Zone WAF          | Read + Edit |
 
 Scope: **All zones in account** (or specific zones if preferred).
 
@@ -67,12 +68,12 @@ APP_SECRET=your_app_secret_here
 
 ## Environment Variables
 
-| Variable | Where | Purpose |
-|----------|-------|---------|
-| `CF_API_TOKEN` | `.dev.vars` / Workers Secret | Cloudflare API bearer token |
-| `CF_ACCOUNT_ID` | `wrangler.jsonc` `vars` | Cloudflare account ID |
-| `APP_SECRET` | `.dev.vars` / Workers Secret | Bearer token for API auth (production) |
-| `ENVIRONMENT` | `wrangler.jsonc` `vars` | `development` or `production` |
+| Variable        | Where                        | Purpose                                |
+| --------------- | ---------------------------- | -------------------------------------- |
+| `CF_API_TOKEN`  | `.dev.vars` / Workers Secret | Cloudflare API bearer token            |
+| `CF_ACCOUNT_ID` | `wrangler.jsonc` `vars`      | Cloudflare account ID                  |
+| `APP_SECRET`    | `.dev.vars` / Workers Secret | Bearer token for API auth (production) |
+| `ENVIRONMENT`   | `wrangler.jsonc` `vars`      | `development` or `production`          |
 
 ## Project Structure
 
@@ -133,32 +134,32 @@ cloudy-mccloudflare/
 
 All routes are prefixed with `/api`.
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/health` | Health check + environment info |
-| GET | `/zones` | List all zones (cached in D1, 5min TTL) |
-| GET | `/zones/:id` | Zone detail |
-| GET | `/zones/:id/settings` | Zone settings |
-| PATCH | `/zones/:id/settings` | Update a zone setting |
-| POST | `/zones/sync` | Force re-sync zone cache |
-| GET | `/dns/:zoneId` | List DNS records for a zone |
-| POST | `/dns/:zoneId` | Create a DNS record |
-| PATCH | `/dns/:zoneId/:recordId` | Update a DNS record |
-| DELETE | `/dns/:zoneId/:recordId` | Delete a DNS record |
-| POST | `/dns/batch` | Batch DNS operations |
-| GET | `/groups` | List all groups |
-| POST | `/groups` | Create a group |
-| GET | `/groups/:id` | Get group detail |
-| PUT | `/groups/:id` | Update a group |
-| DELETE | `/groups/:id` | Delete a group |
-| POST | `/groups/:id/zones` | Add zones to group |
-| DELETE | `/groups/:id/zones` | Remove zones from group |
-| GET | `/security/:zoneId/rules` | Get WAF rules for zone |
-| POST | `/security/:zoneId/rules` | Deploy rules to zone |
-| DELETE | `/security/:zoneId/rules/:ruleId` | Delete a rule |
-| POST | `/security/deploy` | Batch deploy to zones/groups |
-| GET | `/security/deployments` | Deployment audit log |
-| GET | `/templates` | List built-in rule templates |
+| Method | Route                             | Description                             |
+| ------ | --------------------------------- | --------------------------------------- |
+| GET    | `/health`                         | Health check + environment info         |
+| GET    | `/zones`                          | List all zones (cached in D1, 5min TTL) |
+| GET    | `/zones/:id`                      | Zone detail                             |
+| GET    | `/zones/:id/settings`             | Zone settings                           |
+| PATCH  | `/zones/:id/settings`             | Update a zone setting                   |
+| POST   | `/zones/sync`                     | Force re-sync zone cache                |
+| GET    | `/dns/:zoneId`                    | List DNS records for a zone             |
+| POST   | `/dns/:zoneId`                    | Create a DNS record                     |
+| PATCH  | `/dns/:zoneId/:recordId`          | Update a DNS record                     |
+| DELETE | `/dns/:zoneId/:recordId`          | Delete a DNS record                     |
+| POST   | `/dns/batch`                      | Batch DNS operations                    |
+| GET    | `/groups`                         | List all groups                         |
+| POST   | `/groups`                         | Create a group                          |
+| GET    | `/groups/:id`                     | Get group detail                        |
+| PUT    | `/groups/:id`                     | Update a group                          |
+| DELETE | `/groups/:id`                     | Delete a group                          |
+| POST   | `/groups/:id/zones`               | Add zones to group                      |
+| DELETE | `/groups/:id/zones`               | Remove zones from group                 |
+| GET    | `/security/:zoneId/rules`         | Get WAF rules for zone                  |
+| POST   | `/security/:zoneId/rules`         | Deploy rules to zone                    |
+| DELETE | `/security/:zoneId/rules/:ruleId` | Delete a rule                           |
+| POST   | `/security/deploy`                | Batch deploy to zones/groups            |
+| GET    | `/security/deployments`           | Deployment audit log                    |
+| GET    | `/templates`                      | List built-in rule templates            |
 
 ## Database Schema (D1)
 
@@ -193,7 +194,7 @@ The Vite `root` is `src/client` but the Wrangler config lives at the project roo
 cloudflare({
   configPath: path.resolve(__dirname, "wrangler.jsonc"),
   persistState: { path: path.resolve(__dirname, ".wrangler/state") },
-})
+});
 ```
 
 `persistState` ensures `wrangler d1 migrations apply --local` and the Vite dev server share the same SQLite files.
