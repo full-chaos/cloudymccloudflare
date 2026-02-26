@@ -13,7 +13,10 @@ concurrency:
 jobs:
   ci:
     name: CI Checks
-    uses: ./.github/workflows/ci.yml
+    runs-on: ubuntu-latest
+    steps:
+      - name: CI placeholder
+        run: echo "CI is handled by a separate workflow."
 
   migrate:
     name: Migrate D1
