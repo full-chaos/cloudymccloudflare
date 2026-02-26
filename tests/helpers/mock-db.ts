@@ -1,12 +1,14 @@
 /**
- * In-memory D1 mock using miniflare for integration tests.
- * Falls back to a simple mock for unit tests that don't need real SQL.
+ * Lightweight D1Database mock for tests.
+ * Implements only the minimal method surface using vi.fn() stubs and does not
+ * provide real SQL or storage semantics.
  */
 import { vi } from "vitest";
 
 /**
- * Creates a minimal D1Database mock that can be used with Hono route tests.
- * For full SQL support, use createD1FromSQL which sets up a real SQLite DB.
+ * Creates a minimal D1Database-shaped mock that can be used with Hono route
+ * tests and other unit tests that only assert calls and basic return values.
+ * This mock always returns canned results and does not execute SQL.
  */
 export function createMockD1(): D1Database {
   const mockStatement = {
