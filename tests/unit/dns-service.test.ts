@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { getDNSRecords, createRecord, updateRecord, deleteRecord } from "@server/services/dns.service";
 import { createMockCFClient, fakeDNSRecord } from "../helpers/mock-cf";
 import type { CloudflareClient } from "@server/services/cloudflare";

@@ -14,10 +14,6 @@ function createApp(appSecret: string) {
   return app;
 }
 
-function makeRequest(path: string, headers: Record<string, string> = {}) {
-  return new Request(`http://localhost${path}`, { headers });
-}
-
 describe("authMiddleware", () => {
   it("allows /api/health without auth", async () => {
     const app = createApp("secret123");
