@@ -1,0 +1,44 @@
+{
+  "name": "cloudlymccloudflare",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && wrangler deploy",
+    "build:docker": "vite build && esbuild src/server/docker-entry.ts --bundle --platform=node --outdir=dist/server --external:better-sqlite3",
+    "docker:up": "docker compose up --build",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "wrangler d1 migrations apply cloudlymccloudflare-db",
+    "db:migrate:local": "wrangler d1 migrations apply cloudlymccloudflare-db --local",
+    "db:seed": "npx tsx scripts/seed-zones.ts",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.39.0",
+    "hono": "^4.7.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.0.0",
+    "@cloudflare/workers-types": "^4.20250224.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.0",
+    "drizzle-kit": "^0.30.0",
+    "esbuild": "^0.24.0",
+    "postcss": "^8.5.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.2.0",
+    "vitest": "^3.0.0",
+    "wrangler": "^3.109.0"
+  }
+}
