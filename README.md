@@ -1,6 +1,7 @@
 # CloudlyMcCloudFlare
 
 Multi-zone Cloudflare management dashboard. Manage DNS records, WAF/security rules, and zone groups across all your domains from a single interface.
+<img width="1031" height="753" alt="Safari 2026-02-26 13 20 45" src="https://github.com/user-attachments/assets/29269fe2-df79-4924-9f0a-408991734f7a" />
 
 ## Stack
 
