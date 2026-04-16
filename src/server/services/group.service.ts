@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { nanoid } from "../utils/nanoid";
 import type { Database } from "../db";
 import { groups, groupZones } from "../db/schema";
@@ -222,22 +222,9 @@ export async function removeZonesFromGroup(
 ): Promise<void> {
   if (zoneIds.length === 0) return;
 
-  // Get current zone records for this group
-  const current = await db
-    .select()
-    .from(groupZones)
-    .where(eq(groupZones.groupId, groupId));
-
-  // Delete all zones for this group first
-  await db.delete(groupZones).where(eq(groupZones.groupId, groupId));
-
-  // Re-insert zones NOT in the removal list
-  const toRemoveSet = new Set(zoneIds);
-  const toKeep = current.filter((z) => !toRemoveSet.has(z.zoneId));
-
-  if (toKeep.length > 0) {
-    await db.insert(groupZones).values(toKeep);
-  }
+  await db
+    .delete(groupZones)
+    .where(and(eq(groupZones.groupId, groupId), inArray(groupZones.zoneId, zoneIds)));
 
   // Update group's updatedAt
   const now = new Date().toISOString();

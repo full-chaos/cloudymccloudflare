@@ -1,6 +1,7 @@
 import { desc, eq, sql } from "drizzle-orm";
 import type { Bindings } from "../types/env";
 import { createDb } from "../db";
+import { ensureAnalyticsSchema } from "../db/ensure-analytics-schema";
 import { analyticsZoneHourly, analyticsSyncLog } from "../db/schema";
 import { CloudflareClient } from "./cloudflare";
 
@@ -9,8 +10,14 @@ import { CloudflareClient } from "./cloudflare";
 /** Cloudflare GraphQL allows up to 10 zones per `zoneTag_in` filter. */
 const ZONE_CHUNK_SIZE = 10;
 
-/** Window size if this is the first backfill run (no prior success log). */
-const INITIAL_BACKFILL_HOURS = 48;
+/** Cloudflare GraphQL analytics rejects per-zone ranges wider than 3 days. */
+const MAX_GRAPHQL_WINDOW_HOURS = 24 * 3;
+
+/**
+ * Cloudflare GraphQL also rejects requests whose oldest timestamp is more than
+ * about ~3 days behind "now". Use a conservative 48h lookback for refreshes.
+ */
+const MAX_GRAPHQL_LOOKBACK_HOURS = 48;
 
 /**
  * Overlap (re-fetch) hours beyond the last success.
@@ -83,6 +90,7 @@ export interface BackfillResult {
  * that's 10 calls per cron run — well under CF's 300/5-min ceiling.
  */
 export async function runAnalyticsBackfill(env: Bindings): Promise<BackfillResult> {
+  await ensureAnalyticsSchema(env.DB);
   const db = createDb(env.DB);
   const cf = new CloudflareClient(env.CF_API_TOKEN, env.CF_ACCOUNT_ID);
   const startedAt = new Date().toISOString();
@@ -97,11 +105,19 @@ export async function runAnalyticsBackfill(env: Bindings): Promise<BackfillResul
       return { rowsUpserted: 0, zonesQueried: 0, windowStart: since, windowEnd: until };
     }
 
-    const chunks = chunk(zoneTags, ZONE_CHUNK_SIZE);
+    const zoneChunks = chunk(zoneTags, ZONE_CHUNK_SIZE);
+    const timeWindows = splitGraphQLWindows(since, until);
+
     // Run chunks in parallel — the CloudflareClient ConcurrencyQueue caps at 4.
     const chunkResults = await Promise.all(
-      chunks.map((tags) =>
-        cf.graphql<ZoneBatchResponse>(ZONE_BATCH_QUERY, { zoneTags: tags, since, until }),
+      zoneChunks.flatMap((tags) =>
+        timeWindows.map((window) =>
+          cf.graphql<ZoneBatchResponse>(ZONE_BATCH_QUERY, {
+            zoneTags: tags,
+            since: window.since,
+            until: window.until,
+          }),
+        ),
       ),
     );
 
@@ -158,7 +174,6 @@ async function computeWindow(
   db: ReturnType<typeof createDb>,
 ): Promise<{ since: string; until: string }> {
   const now = new Date();
-  const until = now.toISOString();
 
   const lastSuccess = await db
     .select()
@@ -167,15 +182,52 @@ async function computeWindow(
     .orderBy(desc(analyticsSyncLog.finishedAt))
     .limit(1);
 
-  if (lastSuccess.length > 0 && lastSuccess[0].finishedAt) {
-    const last = new Date(lastSuccess[0].finishedAt);
+  return resolveBackfillWindow(
+    now,
+    lastSuccess[0]?.finishedAt ?? null,
+  );
+}
+
+export function resolveBackfillWindow(
+  now: Date,
+  lastSuccessFinishedAt: string | null,
+): { since: string; until: string } {
+  const until = now.toISOString();
+  const safeSince = new Date(now);
+  safeSince.setHours(safeSince.getHours() - MAX_GRAPHQL_LOOKBACK_HOURS);
+
+  if (lastSuccessFinishedAt) {
+    const last = new Date(lastSuccessFinishedAt);
     last.setHours(last.getHours() - OVERLAP_HOURS);
-    return { since: last.toISOString(), until };
+    return {
+      since: new Date(Math.max(last.getTime(), safeSince.getTime())).toISOString(),
+      until,
+    };
   }
 
-  const init = new Date(now);
-  init.setHours(init.getHours() - INITIAL_BACKFILL_HOURS);
-  return { since: init.toISOString(), until };
+  return { since: safeSince.toISOString(), until };
+}
+
+export function splitGraphQLWindows(
+  since: string,
+  until: string,
+): Array<{ since: string; until: string }> {
+  const windows: Array<{ since: string; until: string }> = [];
+  const maxSpanMs = MAX_GRAPHQL_WINDOW_HOURS * 60 * 60 * 1000;
+
+  let cursor = new Date(since).getTime();
+  const end = new Date(until).getTime();
+
+  while (cursor <= end) {
+    const windowEnd = Math.min(cursor + maxSpanMs - 1, end);
+    windows.push({
+      since: new Date(cursor).toISOString(),
+      until: new Date(windowEnd).toISOString(),
+    });
+    cursor = windowEnd + 1;
+  }
+
+  return windows;
 }
 
 async function logRun(

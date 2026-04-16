@@ -8,7 +8,9 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (
     return next();
   }
 
-  // Skip auth in dev mode or when no APP_SECRET is configured
+  // TODO: If this app is exposed beyond localhost, fail closed in production and
+  // gate the placeholder/dev bypass on ENVIRONMENT instead of only APP_SECRET.
+  // Skip auth in local-only mode or when no APP_SECRET is configured
   const secret = c.env.APP_SECRET;
   if (!secret || secret === "your_app_secret_here") {
     return next();

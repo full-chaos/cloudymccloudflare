@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { Bindings } from "../types/env";
 import { CloudflareClient } from "../services/cloudflare";
 import { createDb, zoneCache } from "../db";
@@ -45,43 +45,10 @@ zones.get("/", async (c) => {
 
   // Fetch fresh from CF API and update cache
   const cfZones = await cf.listZones();
-  const now = new Date().toISOString();
 
   // Upsert into zone cache (non-blocking — don't fail the response if cache write fails)
   try {
-    for (const zone of cfZones) {
-      const existing = cachedZones.find((z) => z.id === zone.id);
-
-      if (existing) {
-        await db
-          .update(zoneCache)
-          .set({
-            name: zone.name,
-            status: zone.status,
-            paused: zone.paused,
-            planName: zone.plan?.name ?? "",
-            planPrice: zone.plan?.price ?? 0,
-            nameServers: JSON.stringify(zone.name_servers ?? []),
-            accountId: zone.account?.id ?? "",
-            rawJson: JSON.stringify(zone),
-            syncedAt: now,
-          })
-          .where(eq(zoneCache.id, zone.id));
-      } else {
-        await db.insert(zoneCache).values({
-          id: zone.id,
-          name: zone.name,
-          status: zone.status,
-          paused: zone.paused,
-          planName: zone.plan?.name ?? "",
-          planPrice: zone.plan?.price ?? 0,
-          nameServers: JSON.stringify(zone.name_servers ?? []),
-          accountId: zone.account?.id ?? "",
-          rawJson: JSON.stringify(zone),
-          syncedAt: now,
-        });
-      }
-    }
+    await syncZoneCache(db, cachedZones.map((zone) => zone.id), cfZones);
   } catch {
     // Cache write failed — still return the fresh API data
     console.warn("Failed to update zone cache in D1");
@@ -158,27 +125,8 @@ zones.post("/sync", async (c) => {
   const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
 
   const cfZones = await cf.listZones();
-  const now = new Date().toISOString();
-
-  // Clear and repopulate cache
-  await db.delete(zoneCache);
-
-  if (cfZones.length > 0) {
-    await db.insert(zoneCache).values(
-      cfZones.map((zone) => ({
-        id: zone.id,
-        name: zone.name,
-        status: zone.status,
-        paused: zone.paused,
-        planName: zone.plan?.name ?? "",
-        planPrice: zone.plan?.price ?? 0,
-        nameServers: JSON.stringify(zone.name_servers ?? []),
-        accountId: zone.account?.id ?? "",
-        rawJson: JSON.stringify(zone),
-        syncedAt: now,
-      }))
-    );
-  }
+  const cachedZones = await db.select({ id: zoneCache.id }).from(zoneCache);
+  const now = await syncZoneCache(db, cachedZones.map((zone) => zone.id), cfZones);
 
   return c.json({
     success: true,
@@ -188,5 +136,44 @@ zones.post("/sync", async (c) => {
     },
   });
 });
+
+async function syncZoneCache(
+  db: ReturnType<typeof createDb>,
+  cachedZoneIds: string[],
+  cfZones: Awaited<ReturnType<CloudflareClient["listZones"]>>,
+): Promise<string> {
+  const now = new Date().toISOString();
+  const liveZoneIds = new Set(cfZones.map((zone) => zone.id));
+  const staleZoneIds = cachedZoneIds.filter((zoneId) => !liveZoneIds.has(zoneId));
+
+  if (staleZoneIds.length > 0) {
+    await db.delete(zoneCache).where(inArray(zoneCache.id, staleZoneIds));
+  }
+
+  for (const zone of cfZones) {
+    const payload = {
+      name: zone.name,
+      status: zone.status,
+      paused: zone.paused,
+      planName: zone.plan?.name ?? "",
+      planPrice: zone.plan?.price ?? 0,
+      nameServers: JSON.stringify(zone.name_servers ?? []),
+      accountId: zone.account?.id ?? "",
+      rawJson: JSON.stringify(zone),
+      syncedAt: now,
+    };
+
+    if (cachedZoneIds.includes(zone.id)) {
+      await db.update(zoneCache).set(payload).where(eq(zoneCache.id, zone.id));
+    } else {
+      await db.insert(zoneCache).values({
+        id: zone.id,
+        ...payload,
+      });
+    }
+  }
+
+  return now;
+}
 
 export default zones;
