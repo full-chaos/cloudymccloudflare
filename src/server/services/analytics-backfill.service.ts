@@ -10,8 +10,8 @@ import { CloudflareClient } from "./cloudflare";
 /** Cloudflare GraphQL allows up to 10 zones per `zoneTag_in` filter. */
 const ZONE_CHUNK_SIZE = 10;
 
-/** Window size if this is the first backfill run (no prior success log). */
-const INITIAL_BACKFILL_HOURS = 48;
+/** Minimum history retained in D1 so the 30d analytics view can populate. */
+const ANALYTICS_HISTORY_HOURS = 24 * 30;
 
 /**
  * Overlap (re-fetch) hours beyond the last success.
@@ -160,7 +160,11 @@ async function computeWindow(
   db: ReturnType<typeof createDb>,
 ): Promise<{ since: string; until: string }> {
   const now = new Date();
-  const until = now.toISOString();
+  const [historyRow] = await db
+    .select({
+      oldestHourBucket: sql<string | null>`MIN(${analyticsZoneHourly.hourBucket})`,
+    })
+    .from(analyticsZoneHourly);
 
   const lastSuccess = await db
     .select()
@@ -169,15 +173,35 @@ async function computeWindow(
     .orderBy(desc(analyticsSyncLog.finishedAt))
     .limit(1);
 
-  if (lastSuccess.length > 0 && lastSuccess[0].finishedAt) {
-    const last = new Date(lastSuccess[0].finishedAt);
+  return resolveBackfillWindow(
+    now,
+    historyRow?.oldestHourBucket ?? null,
+    lastSuccess[0]?.finishedAt ?? null,
+  );
+}
+
+export function resolveBackfillWindow(
+  now: Date,
+  oldestHourBucket: string | null,
+  lastSuccessFinishedAt: string | null,
+): { since: string; until: string } {
+  const until = now.toISOString();
+  const targetSince = new Date(now);
+  targetSince.setHours(targetSince.getHours() - ANALYTICS_HISTORY_HOURS);
+
+  // If we do not yet have a full 30 days of data, widen the next backfill to
+  // cover the missing history instead of only refreshing the recent tail.
+  if (!oldestHourBucket || new Date(oldestHourBucket) > targetSince) {
+    return { since: targetSince.toISOString(), until };
+  }
+
+  if (lastSuccessFinishedAt) {
+    const last = new Date(lastSuccessFinishedAt);
     last.setHours(last.getHours() - OVERLAP_HOURS);
     return { since: last.toISOString(), until };
   }
 
-  const init = new Date(now);
-  init.setHours(init.getHours() - INITIAL_BACKFILL_HOURS);
-  return { since: init.toISOString(), until };
+  return { since: targetSince.toISOString(), until };
 }
 
 async function logRun(
