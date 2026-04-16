@@ -15,11 +15,19 @@ export type {
   DeploymentLogEntry,
   ZoneSetting,
   ApiResponse,
+  AnalyticsRange,
+  ZoneMetrics,
+  AccountTotals,
+  AccountAnalytics,
+  GroupAnalytics,
+  ZoneTimeSeriesPoint,
+  ZoneAnalytics,
+  AnalyticsStatus,
 } from "../../shared/types";
 
 // ─── UI-Specific Types ────────────────────────────────────────────────────────
 
-export type ViewType = "dashboard" | "groups" | "dns" | "security" | "templates";
+export type ViewType = "dashboard" | "groups" | "dns" | "security" | "templates" | "analytics";
 
 export type ToastType = "success" | "error" | "warning" | "info";
 

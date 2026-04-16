@@ -6,6 +6,7 @@ import { GroupsView } from "./components/groups/GroupsView";
 import { DNSView } from "./components/dns/DNSView";
 import { SecurityView } from "./components/security/SecurityView";
 import { TemplatesView } from "./components/templates/TemplatesView";
+import { AnalyticsView } from "./components/analytics/AnalyticsView";
 import { ToastContainer } from "./components/shared/Toast";
 import { useToast } from "./hooks/useToast";
 import { useZones } from "./hooks/useZones";
@@ -173,6 +174,15 @@ export default function App() {
         return (
           <TemplatesView
             onNavigateToSecurity={handleNavigateToSecurity}
+            onToast={addToast}
+          />
+        );
+
+      case "analytics":
+        return (
+          <AnalyticsView
+            zones={zones}
+            groups={groups}
             onToast={addToast}
           />
         );

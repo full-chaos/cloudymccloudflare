@@ -18,7 +18,8 @@
       "@server/*": ["./src/server/*"],
       "@client/*": ["./src/client/*"]
     },
-    "baseUrl": "."
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist", "src/server/docker-entry.ts"]

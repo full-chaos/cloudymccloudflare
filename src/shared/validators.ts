@@ -183,3 +183,15 @@ export const updateTemplateSchema = z.object({
 });
 
 export type UpdateTemplateInput = z.infer<typeof updateTemplateSchema>;
+
+// ─── Analytics Schema ─────────────────────────────────────────────────────────
+
+export const analyticsRangeSchema = z.enum(["24h", "7d", "30d"]);
+
+export type AnalyticsRangeInput = z.infer<typeof analyticsRangeSchema>;
+
+export const analyticsQuerySchema = z.object({
+  range: analyticsRangeSchema.optional().default("24h"),
+});
+
+export type AnalyticsQueryInput = z.infer<typeof analyticsQuerySchema>;

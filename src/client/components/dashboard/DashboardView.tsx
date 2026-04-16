@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { Zone, Group } from "../../types";
 import type { DomainCluster } from "../../types";
+import { toClusters } from "../../lib/clusters";
 import { LoadingOverlay } from "../shared/LoadingSpinner";
 
 interface StatCardProps {
@@ -91,28 +92,7 @@ export function DashboardView({
   loading,
   onNavigateToDNS,
 }: DashboardViewProps) {
-  const clusters = useMemo((): DomainCluster[] => {
-    const map = new Map<string, Zone[]>();
-
-    for (const zone of zones) {
-      const parts = zone.name.split(".");
-      // Base name = everything before the last TLD portion
-      // e.g., "chrisgeorge.tech" -> base "chrisgeorge"
-      // "chrisgeorgephotography.com" -> base "chrisgeorgephotography"
-      // "dave-gregory.com" -> base "dave-gregory"
-      const dotIdx = zone.name.indexOf(".");
-      const base = dotIdx !== -1 ? zone.name.slice(0, dotIdx) : zone.name;
-
-      if (!map.has(base)) map.set(base, []);
-      map.get(base)!.push(zone);
-    }
-
-    // Only include clusters with at least 2 zones (true clusters)
-    // Or include all if there's only one zone per base (show all)
-    return Array.from(map.entries())
-      .map(([baseName, clusterZones]) => ({ baseName, zones: clusterZones }))
-      .sort((a, b) => b.zones.length - a.zones.length);
-  }, [zones]);
+  const clusters = useMemo((): DomainCluster[] => toClusters(zones), [zones]);
 
   const groupedZoneIds = useMemo(() => {
     const ids = new Set<string>();

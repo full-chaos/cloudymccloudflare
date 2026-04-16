@@ -4,14 +4,16 @@ import { logger } from "hono/logger";
 import type { Bindings } from "./types/env";
 import { authMiddleware } from "./middleware/auth";
 import { errorHandler } from "./middleware/errorHandler";
+import { runAnalyticsBackfill } from "./services/analytics-backfill.service";
 import health from "./routes/health";
 import zones from "./routes/zones";
 import dns from "./routes/dns";
 import groups from "./routes/groups";
 import security from "./routes/security";
 import templates from "./routes/templates";
+import analytics from "./routes/analytics";
 
-const app = new Hono<{ Bindings: Bindings }>();
+export const app = new Hono<{ Bindings: Bindings }>();
 
 // ─── Global Middleware ────────────────────────────────────────────────────────
 
@@ -39,6 +41,7 @@ app.route("/api/dns", dns);
 app.route("/api/groups", groups);
 app.route("/api/security", security);
 app.route("/api/templates", templates);
+app.route("/api/analytics", analytics);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 
@@ -56,4 +59,21 @@ app.notFound((c) => {
 
 app.onError(errorHandler);
 
-export default app;
+// ─── Workers Entry ────────────────────────────────────────────────────────────
+
+export default {
+  fetch: app.fetch,
+  // Cron Trigger (see wrangler.jsonc `triggers.crons`).
+  // Runs the analytics backfill; errors are logged into analytics_sync_log.
+  scheduled: async (
+    _controller: ScheduledController,
+    env: Bindings,
+    ctx: ExecutionContext,
+  ): Promise<void> => {
+    ctx.waitUntil(
+      runAnalyticsBackfill(env).catch((err) => {
+        console.error("analytics backfill failed:", err);
+      }),
+    );
+  },
+} satisfies ExportedHandler<Bindings>;

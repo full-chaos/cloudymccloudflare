@@ -16,6 +16,11 @@
   "vars": {
     "ENVIRONMENT": "production",
     "CF_ACCOUNT_ID": "f39dbcd4130fd731be7f0f77bf013e01"
+  },
+  // Analytics backfill: fetch fresh per-zone hourly buckets every 15 minutes.
+  // Runs src/server/index.ts `scheduled` export → runAnalyticsBackfill().
+  "triggers": {
+    "crons": ["*/15 * * * *"]
   }
   // CF_API_TOKEN and APP_SECRET go in .dev.vars (local) and Workers Secrets (prod)
 }

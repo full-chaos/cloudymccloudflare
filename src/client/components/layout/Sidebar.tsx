@@ -18,6 +18,15 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    id: "analytics",
+    label: "Analytics",
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M4 11H2v3h2v-3zm5-4H7v7h2V7zm5-5v12h-2V2h2zM1 15h14v-1H1v1z" />
+      </svg>
+    ),
+  },
+  {
     id: "groups",
     label: "Groups",
     icon: (

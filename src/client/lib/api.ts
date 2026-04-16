@@ -9,6 +9,11 @@ import type {
   DeployPayload,
   DeploymentLogEntry,
   ApiResponse,
+  AnalyticsRange,
+  AccountAnalytics,
+  GroupAnalytics,
+  ZoneAnalytics,
+  AnalyticsStatus,
 } from "../types";
 
 // ─── Base Fetch Wrapper ───────────────────────────────────────────────────────
@@ -163,8 +168,9 @@ export const api = {
       return del<void>(`/groups/${groupId}`);
     },
 
-    addZone(groupId: string, zoneId: string): Promise<Group> {
-      return post<Group>(`/groups/${groupId}/zones`, { zones: [zoneId] });
+    addZone(groupId: string, zoneId: string, zoneName: string): Promise<Group> {
+      // Server expects { zones: [{zoneId, zoneName}] } — see addZonesToGroupSchema.
+      return post<Group>(`/groups/${groupId}/zones`, { zones: [{ zoneId, zoneName }] });
     },
 
     removeZone(groupId: string, zoneId: string): Promise<Group> {
@@ -204,6 +210,30 @@ export const api = {
   templates: {
     list(): Promise<Record<string, import("../../shared/types").RuleTemplate>> {
       return get("/templates");
+    },
+  },
+
+  // ─── Analytics ──────────────────────────────────────────────────────────────
+  // Server routes: app.route("/api/analytics", analytics)
+  analytics: {
+    account(range: AnalyticsRange): Promise<AccountAnalytics> {
+      return get<AccountAnalytics>(`/analytics/account?range=${range}`);
+    },
+
+    group(groupId: string, range: AnalyticsRange): Promise<GroupAnalytics> {
+      return get<GroupAnalytics>(`/analytics/group/${groupId}?range=${range}`);
+    },
+
+    zone(zoneId: string, range: AnalyticsRange): Promise<ZoneAnalytics> {
+      return get<ZoneAnalytics>(`/analytics/zone/${zoneId}?range=${range}`);
+    },
+
+    status(): Promise<AnalyticsStatus> {
+      return get<AnalyticsStatus>("/analytics/status");
+    },
+
+    refresh(): Promise<{ rowsUpserted: number; zonesQueried: number }> {
+      return post<{ rowsUpserted: number; zonesQueried: number }>("/analytics/refresh");
     },
   },
 };

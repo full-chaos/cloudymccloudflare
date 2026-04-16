@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, primaryKey } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ─── Groups ───────────────────────────────────────────────────────────────────
@@ -96,3 +96,43 @@ export const zoneCache = sqliteTable("zone_cache", {
 
 export type ZoneCache = typeof zoneCache.$inferSelect;
 export type NewZoneCache = typeof zoneCache.$inferInsert;
+
+// ─── Analytics (raw hourly buckets) ───────────────────────────────────────────
+
+export const analyticsZoneHourly = sqliteTable(
+  "analytics_zone_hourly",
+  {
+    zoneId: text("zone_id").notNull(),
+    hourBucket: text("hour_bucket").notNull(), // ISO hour
+    requests: integer("requests").notNull().default(0),
+    bytes: integer("bytes").notNull().default(0),
+    cachedBytes: integer("cached_bytes").notNull().default(0),
+    threats: integer("threats").notNull().default(0),
+    sampleInterval: real("sample_interval").notNull().default(1),
+    fetchedAt: text("fetched_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.zoneId, t.hourBucket] }),
+  }),
+);
+
+export type AnalyticsZoneHourly = typeof analyticsZoneHourly.$inferSelect;
+export type NewAnalyticsZoneHourly = typeof analyticsZoneHourly.$inferInsert;
+
+// ─── Analytics sync log ───────────────────────────────────────────────────────
+
+export const analyticsSyncLog = sqliteTable("analytics_sync_log", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  startedAt: text("started_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  finishedAt: text("finished_at"),
+  rowsUpserted: integer("rows_upserted"),
+  status: text("status").notNull(), // 'success' | 'partial' | 'error'
+  error: text("error"),
+});
+
+export type AnalyticsSyncLog = typeof analyticsSyncLog.$inferSelect;
+export type NewAnalyticsSyncLog = typeof analyticsSyncLog.$inferInsert;

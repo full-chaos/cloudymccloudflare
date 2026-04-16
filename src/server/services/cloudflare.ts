@@ -138,6 +138,84 @@ export class CloudflareClient {
     throw lastError ?? new Error(`Request to ${path} failed after ${retries} attempts`);
   }
 
+  // ─── GraphQL (Analytics API) ────────────────────────────────────────────────
+
+  /**
+   * Execute a GraphQL query against the Cloudflare Analytics API.
+   * The GraphQL endpoint uses a different response envelope than REST
+   * (`{ data, errors }` vs `{ success, result, errors }`) so we can't reuse
+   * `request<T>` which hardcodes the REST envelope check.
+   * Shares the concurrency queue + exponential backoff retry logic.
+   */
+  async graphql<T>(
+    query: string,
+    variables: Record<string, unknown> = {},
+    retries = 3,
+  ): Promise<T> {
+    return this.queue.run(async () => {
+      const url = `${CF_API_BASE}/graphql`;
+      const body = JSON.stringify({ query, variables });
+
+      let lastError: Error | null = null;
+
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          const response = await fetch(url, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${this.apiToken}`,
+              "Content-Type": "application/json",
+            },
+            body,
+          });
+
+          if (response.status === 429) {
+            const retryAfter = response.headers.get("Retry-After");
+            const waitMs = retryAfter
+              ? parseInt(retryAfter, 10) * 1000
+              : Math.pow(2, attempt) * 1000;
+            if (attempt < retries - 1) {
+              await sleep(waitMs);
+              continue;
+            }
+          }
+
+          const payload = (await response.json()) as CFGraphQLResponse<T>;
+
+          if (payload.errors && payload.errors.length > 0) {
+            const errMsg = payload.errors.map((e) => e.message).join("; ");
+            throw new CloudflareApiError(
+              `GraphQL error: ${errMsg}`,
+              0,
+              response.status,
+            );
+          }
+
+          if (!response.ok || !payload.data) {
+            throw new CloudflareApiError(
+              `GraphQL request failed (HTTP ${response.status})`,
+              0,
+              response.status,
+            );
+          }
+
+          return payload.data;
+        } catch (err) {
+          if (err instanceof CloudflareApiError) {
+            // Don't retry auth/schema errors (we'd just keep failing).
+            throw err;
+          }
+          lastError = err instanceof Error ? err : new Error(String(err));
+          if (attempt < retries - 1) {
+            await sleep(Math.pow(2, attempt) * 500);
+          }
+        }
+      }
+
+      throw lastError ?? new Error(`GraphQL request failed after ${retries} attempts`);
+    });
+  }
+
   // ─── Zones ──────────────────────────────────────────────────────────────────
 
   async listZones(): Promise<CFZone[]> {
@@ -427,6 +505,13 @@ export class CloudflareClient {
 
     return Promise.all(tasks);
   }
+}
+
+// ─── GraphQL Response Envelope ───────────────────────────────────────────────
+
+interface CFGraphQLResponse<T> {
+  data?: T;
+  errors?: Array<{ message: string; path?: string[]; extensions?: unknown }>;
 }
 
 // ─── Error Class ─────────────────────────────────────────────────────────────

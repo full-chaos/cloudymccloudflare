@@ -12,7 +12,7 @@ interface GroupsViewProps {
   loading: boolean;
   onCreateGroup: (name: string, color: string) => Promise<Group>;
   onDeleteGroup: (groupId: string) => Promise<void>;
-  onAddZone: (groupId: string, zoneId: string) => Promise<void>;
+  onAddZone: (groupId: string, zoneId: string, zoneName: string) => Promise<void>;
   onRemoveZone: (groupId: string, zoneId: string) => Promise<void>;
   onToast: (message: string, type?: ToastType) => void;
 }
@@ -83,7 +83,10 @@ export function GroupsView({
       if (inGroup) {
         await onRemoveZone(selectedGroup.id, zoneId);
       } else {
-        await onAddZone(selectedGroup.id, zoneId);
+        // Server expects the zone name alongside the id (denormalized in group_zones).
+        const zone = zones.find((z) => z.id === zoneId);
+        if (!zone) throw new Error(`Zone ${zoneId} not found`);
+        await onAddZone(selectedGroup.id, zoneId, zone.name);
       }
     } catch (err) {
       onToast(err instanceof Error ? err.message : "Failed to update group", "error");

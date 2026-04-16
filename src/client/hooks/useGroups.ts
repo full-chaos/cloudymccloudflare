@@ -12,7 +12,7 @@ export interface UseGroupsReturn {
     updates: { name?: string; color?: string; description?: string; zoneIds?: string[] }
   ) => Promise<Group>;
   deleteGroup: (groupId: string) => Promise<void>;
-  addZoneToGroup: (groupId: string, zoneId: string) => Promise<void>;
+  addZoneToGroup: (groupId: string, zoneId: string, zoneName: string) => Promise<void>;
   removeZoneFromGroup: (groupId: string, zoneId: string) => Promise<void>;
   refresh: () => Promise<void>;
   getGroupById: (id: string) => Group | undefined;
@@ -117,7 +117,7 @@ export function useGroups(): UseGroupsReturn {
   );
 
   const addZoneToGroup = useCallback(
-    async (groupId: string, zoneId: string): Promise<void> => {
+    async (groupId: string, zoneId: string, zoneName: string): Promise<void> => {
       // Optimistic update
       setGroups((prev) =>
         prev.map((g) =>
@@ -128,7 +128,7 @@ export function useGroups(): UseGroupsReturn {
       );
 
       try {
-        const updated = await api.groups.addZone(groupId, zoneId);
+        const updated = await api.groups.addZone(groupId, zoneId, zoneName);
         setGroups((prev) =>
           prev.map((g) => (g.id === groupId ? updated : g))
         );

@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import app from "./index";
+import { app } from "./index";
 
 // Serve static SPA files
 app.use("/*", serveStatic({ root: "./dist/client" }));

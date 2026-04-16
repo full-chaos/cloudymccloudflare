@@ -1,6 +1,9 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4 single-line import (replaces @tailwind base/components/utilities). */
+@import "tailwindcss";
+
+/* Reuse the existing token config so class names (bg-bg-secondary, text-text-muted,
+   font-display, animate-fade-up, etc.) keep working across the app. */
+@config "../../../tailwind.config.ts";
 
 /* ─── CSS Custom Properties ─────────────────────────────────────────────────── */
 

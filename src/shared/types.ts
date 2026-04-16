@@ -132,3 +132,74 @@ export interface ApiResponse<T> {
     message: string;
   }[];
 }
+
+// ─── Analytics ────────────────────────────────────────────────────────────────
+
+export type AnalyticsRange = "24h" | "7d" | "30d";
+
+export interface ZoneMetrics {
+  zoneId: string;
+  zoneName?: string;
+  requests: number;
+  bytes: number;
+  cachedBytes: number;
+  threats: number;
+}
+
+export interface AccountTotals {
+  requests: number;
+  bytes: number;
+  cachedBytes: number;
+  threats: number;
+  cacheHitRatio: number; // 0..1
+}
+
+export interface AccountAnalytics {
+  range: AnalyticsRange;
+  windowStart: string; // ISO
+  windowEnd: string; // ISO
+  totals: AccountTotals;
+  perZone: ZoneMetrics[];
+  lastFetchedAt: string | null;
+  sampleInterval: number; // max across buckets; >1 means CF sampled
+}
+
+export interface GroupAnalytics {
+  range: AnalyticsRange;
+  windowStart: string;
+  windowEnd: string;
+  groupId: string;
+  groupName: string;
+  zoneCount: number;
+  totals: AccountTotals;
+  perZone: ZoneMetrics[];
+  lastFetchedAt: string | null;
+  sampleInterval: number;
+}
+
+export interface ZoneTimeSeriesPoint {
+  timestamp: string; // ISO hour
+  requests: number;
+  bytes: number;
+  cachedBytes: number;
+  threats: number;
+}
+
+export interface ZoneAnalytics {
+  range: AnalyticsRange;
+  windowStart: string;
+  windowEnd: string;
+  zoneId: string;
+  zoneName?: string;
+  totals: AccountTotals;
+  series: ZoneTimeSeriesPoint[];
+  lastFetchedAt: string | null;
+  sampleInterval: number;
+}
+
+export interface AnalyticsStatus {
+  lastFetchedAt: string | null;
+  rowCount: number;
+  lastRunStatus: "success" | "partial" | "error" | "never";
+  lastRunError: string | null;
+}

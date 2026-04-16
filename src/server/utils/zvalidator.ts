@@ -10,7 +10,8 @@ export function zValidator<T>(schema: ZodSchema<T>) {
   return validator("json", async (value, c) => {
     const result = schema.safeParse(value);
     if (!result.success) {
-      const message = result.error.errors
+      // Zod 4: `error.errors` → `error.issues`.
+      const message = result.error.issues
         .map((e) => `${e.path.join(".")}: ${e.message}`)
         .join("; ");
       throw new HTTPException(400, { message: `Validation error: ${message}` });
@@ -26,7 +27,7 @@ export function zValidatorParam<T>(schema: ZodSchema<T>) {
   return validator("param", (value, c) => {
     const result = schema.safeParse(value);
     if (!result.success) {
-      const message = result.error.errors
+      const message = result.error.issues
         .map((e) => `${e.path.join(".")}: ${e.message}`)
         .join("; ");
       throw new HTTPException(400, { message: `Invalid parameters: ${message}` });
