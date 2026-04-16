@@ -224,22 +224,8 @@ export class CloudflareClient {
     const perPage = 50;
 
     while (true) {
-      const url = `/zones?account.id=${this.accountId}&page=${page}&per_page=${perPage}&status=active`;
-
-      const response = await fetch(`${CF_API_BASE}${url}`, {
-        headers: {
-          Authorization: `Bearer ${this.apiToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      const data = (await response.json()) as CFApiResponse<CFZone[]>;
-
-      if (!data.success) {
-        const errorMsg = data.errors.map((e) => `[${e.code}] ${e.message}`).join("; ");
-        throw new CloudflareApiError(errorMsg, data.errors[0]?.code ?? 0, response.status);
-      }
-
+      const path = `/zones?account.id=${this.accountId}&page=${page}&per_page=${perPage}&status=active`;
+      const data = await this.requestWithEnvelope<CFZone[]>("GET", path);
       zones.push(...data.result);
 
       const info = data.result_info;
@@ -263,23 +249,8 @@ export class CloudflareClient {
     const perPage = 100;
 
     while (true) {
-      const response = await fetch(
-        `${CF_API_BASE}/zones/${zoneId}/dns_records?page=${page}&per_page=${perPage}`,
-        {
-          headers: {
-            Authorization: `Bearer ${this.apiToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const data = (await response.json()) as CFApiResponse<CFDNSRecord[]>;
-
-      if (!data.success) {
-        const errorMsg = data.errors.map((e) => `[${e.code}] ${e.message}`).join("; ");
-        throw new CloudflareApiError(errorMsg, data.errors[0]?.code ?? 0, response.status);
-      }
-
+      const path = `/zones/${zoneId}/dns_records?page=${page}&per_page=${perPage}`;
+      const data = await this.requestWithEnvelope<CFDNSRecord[]>("GET", path);
       records.push(...data.result);
 
       const info = data.result_info;
@@ -442,23 +413,9 @@ export class CloudflareClient {
     const perPage = 100;
 
     while (true) {
-      const response = await fetch(
-        `${CF_API_BASE}/zones/${zoneId}/firewall/access_rules/rules?page=${page}&per_page=${perPage}`,
-        {
-          headers: {
-            Authorization: `Bearer ${this.apiToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const data = (await response.json()) as CFApiResponse<CFIPAccessRule[]>;
-
-      if (!data.success) {
-        const errorMsg = data.errors.map((e) => `[${e.code}] ${e.message}`).join("; ");
-        throw new CloudflareApiError(errorMsg, data.errors[0]?.code ?? 0, response.status);
-      }
-
+      const path =
+        `/zones/${zoneId}/firewall/access_rules/rules?page=${page}&per_page=${perPage}`;
+      const data = await this.requestWithEnvelope<CFIPAccessRule[]>("GET", path);
       rules.push(...data.result);
 
       const info = data.result_info;
@@ -504,6 +461,67 @@ export class CloudflareClient {
     );
 
     return Promise.all(tasks);
+  }
+
+  private async requestWithEnvelope<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    retries = 3,
+  ): Promise<CFApiResponse<T>> {
+    const url = `${CF_API_BASE}${path}`;
+
+    const options: RequestInit = {
+      method,
+      headers: {
+        Authorization: `Bearer ${this.apiToken}`,
+        "Content-Type": "application/json",
+      },
+    };
+
+    if (body !== undefined && method !== "GET" && method !== "DELETE") {
+      options.body = JSON.stringify(body);
+    }
+
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const response = await fetch(url, options);
+
+        if (response.status === 429) {
+          const retryAfter = response.headers.get("Retry-After");
+          const waitMs = retryAfter
+            ? parseInt(retryAfter, 10) * 1000
+            : Math.pow(2, attempt) * 1000;
+
+          if (attempt < retries - 1) {
+            await sleep(waitMs);
+            continue;
+          }
+        }
+
+        const data = (await response.json()) as CFApiResponse<T>;
+
+        if (!data.success) {
+          const errorMsg = data.errors.map((e) => `[${e.code}] ${e.message}`).join("; ");
+          throw new CloudflareApiError(errorMsg, data.errors[0]?.code ?? 0, response.status);
+        }
+
+        return data;
+      } catch (err) {
+        if (err instanceof CloudflareApiError) {
+          throw err;
+        }
+        lastError = err instanceof Error ? err : new Error(String(err));
+
+        if (attempt < retries - 1) {
+          await sleep(Math.pow(2, attempt) * 500);
+        }
+      }
+    }
+
+    throw lastError ?? new Error(`Request to ${path} failed after ${retries} attempts`);
   }
 }
 

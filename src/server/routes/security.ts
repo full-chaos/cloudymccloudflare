@@ -83,6 +83,9 @@ security.delete("/:zoneId/rules/:ruleId", async (c) => {
 
 // POST /api/security/deploy - deploy rules to target zones/group
 security.post("/deploy", zValidator(deployRulesSchema), async (c) => {
+  // TODO: Align this response contract with the client log model. The UI
+  // currently expects per-rule deployment log entries, but this route returns
+  // per-zone deploy results.
   const { target, rules, mode } = c.req.valid("json");
   const db = createDb(c.env.DB);
   const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
