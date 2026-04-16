@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings } from "../types/env";
 import { createDb } from "../db";
+import { ensureAnalyticsSchema } from "../db/ensure-analytics-schema";
 import { analyticsRangeSchema } from "@shared/validators";
 import {
   getAccountAnalytics,
@@ -29,6 +30,7 @@ function parseRange(raw: string | undefined) {
 
 analytics.get("/account", async (c) => {
   const range = parseRange(c.req.query("range"));
+  await ensureAnalyticsSchema(c.env.DB);
   const db = createDb(c.env.DB);
   const result = await getAccountAnalytics(db, range);
   return c.json({ success: true, result });
@@ -39,6 +41,7 @@ analytics.get("/account", async (c) => {
 analytics.get("/group/:groupId", async (c) => {
   const range = parseRange(c.req.query("range"));
   const { groupId } = c.req.param();
+  await ensureAnalyticsSchema(c.env.DB);
   const db = createDb(c.env.DB);
   const result = await getGroupAnalytics(db, groupId, range);
   if (!result) {
@@ -52,6 +55,7 @@ analytics.get("/group/:groupId", async (c) => {
 analytics.get("/zone/:zoneId", async (c) => {
   const range = parseRange(c.req.query("range"));
   const { zoneId } = c.req.param();
+  await ensureAnalyticsSchema(c.env.DB);
   const db = createDb(c.env.DB);
   const result = await getZoneAnalytics(db, zoneId, range);
   return c.json({ success: true, result });
@@ -60,6 +64,7 @@ analytics.get("/zone/:zoneId", async (c) => {
 // ─── GET /api/analytics/status ───────────────────────────────────────────────
 
 analytics.get("/status", async (c) => {
+  await ensureAnalyticsSchema(c.env.DB);
   const db = createDb(c.env.DB);
   const result = await getAnalyticsStatus(db);
   return c.json({ success: true, result });
@@ -70,6 +75,7 @@ analytics.get("/status", async (c) => {
 
 analytics.post("/refresh", async (c) => {
   try {
+    await ensureAnalyticsSchema(c.env.DB);
     const result = await runAnalyticsBackfill(c.env);
     return c.json({ success: true, result });
   } catch (err) {

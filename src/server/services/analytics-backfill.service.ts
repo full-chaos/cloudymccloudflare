@@ -1,6 +1,7 @@
 import { desc, eq, sql } from "drizzle-orm";
 import type { Bindings } from "../types/env";
 import { createDb } from "../db";
+import { ensureAnalyticsSchema } from "../db/ensure-analytics-schema";
 import { analyticsZoneHourly, analyticsSyncLog } from "../db/schema";
 import { CloudflareClient } from "./cloudflare";
 
@@ -83,6 +84,7 @@ export interface BackfillResult {
  * that's 10 calls per cron run — well under CF's 300/5-min ceiling.
  */
 export async function runAnalyticsBackfill(env: Bindings): Promise<BackfillResult> {
+  await ensureAnalyticsSchema(env.DB);
   const db = createDb(env.DB);
   const cf = new CloudflareClient(env.CF_API_TOKEN, env.CF_ACCOUNT_ID);
   const startedAt = new Date().toISOString();
