@@ -10,9 +10,9 @@ describe("ensureAnalyticsSchema", () => {
     await ensureAnalyticsSchema(db);
     await ensureAnalyticsSchema(db);
 
-    expect(db.exec).toHaveBeenCalledTimes(1);
-    expect(db.exec).toHaveBeenCalledWith(expect.stringContaining("analytics_zone_hourly"));
-    expect(db.exec).toHaveBeenCalledWith(expect.stringContaining("analytics_sync_log"));
+    expect(db.exec).toHaveBeenCalledTimes(5);
+    expect(db.exec).toHaveBeenCalledWith(expect.stringContaining("CREATE TABLE IF NOT EXISTS analytics_zone_hourly"));
+    expect(db.exec).toHaveBeenCalledWith(expect.stringContaining("CREATE TABLE IF NOT EXISTS analytics_sync_log"));
   });
 
   it("runs independently for distinct bindings", async () => {
@@ -26,7 +26,7 @@ describe("ensureAnalyticsSchema", () => {
     await ensureAnalyticsSchema(dbA);
     await ensureAnalyticsSchema(dbB);
 
-    expect(dbA.exec).toHaveBeenCalledTimes(1);
-    expect(dbB.exec).toHaveBeenCalledTimes(1);
+    expect(dbA.exec).toHaveBeenCalledTimes(5);
+    expect(dbB.exec).toHaveBeenCalledTimes(5);
   });
 });
