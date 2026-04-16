@@ -5,36 +5,28 @@ import {
 } from "@server/services/analytics-backfill.service";
 
 describe("resolveBackfillWindow", () => {
-  it("backfills a full 30d window when there is no history yet", () => {
+  it("uses a safe 48h lookback when there is no prior success yet", () => {
     const now = new Date("2026-04-16T19:00:00.000Z");
 
-    const window = resolveBackfillWindow(now, null, null);
+    const window = resolveBackfillWindow(now, null);
 
     expect(window.until).toBe("2026-04-16T19:00:00.000Z");
-    expect(window.since).toBe("2026-03-17T19:00:00.000Z");
+    expect(window.since).toBe("2026-04-14T19:00:00.000Z");
   });
 
-  it("still backfills a full 30d window when existing history is too shallow", () => {
+  it("clamps incremental refreshes to the safe lookback floor", () => {
     const now = new Date("2026-04-16T19:00:00.000Z");
 
-    const window = resolveBackfillWindow(
-      now,
-      "2026-04-14T19:00:00.000Z",
-      "2026-04-16T18:45:00.000Z",
-    );
+    const window = resolveBackfillWindow(now, "2026-04-10T18:45:00.000Z");
 
     expect(window.until).toBe("2026-04-16T19:00:00.000Z");
-    expect(window.since).toBe("2026-03-17T19:00:00.000Z");
+    expect(window.since).toBe("2026-04-14T19:00:00.000Z");
   });
 
-  it("switches to incremental overlap refresh once 30d coverage exists", () => {
+  it("uses the overlapping incremental refresh when it is already within the safe lookback", () => {
     const now = new Date("2026-04-16T19:00:00.000Z");
 
-    const window = resolveBackfillWindow(
-      now,
-      "2026-03-01T19:00:00.000Z",
-      "2026-04-16T18:45:00.000Z",
-    );
+    const window = resolveBackfillWindow(now, "2026-04-16T18:45:00.000Z");
 
     expect(window.until).toBe("2026-04-16T19:00:00.000Z");
     expect(window.since).toBe("2026-04-16T16:45:00.000Z");
