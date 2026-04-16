@@ -3,30 +3,36 @@ import { ensureAnalyticsSchema } from "@server/db/ensure-analytics-schema";
 
 describe("ensureAnalyticsSchema", () => {
   it("creates analytics tables and indexes once per binding", async () => {
+    const run = vi.fn().mockResolvedValue(undefined);
     const db = {
-      exec: vi.fn().mockResolvedValue(undefined),
+      prepare: vi.fn(() => ({ run })),
     } as unknown as D1Database;
 
     await ensureAnalyticsSchema(db);
     await ensureAnalyticsSchema(db);
 
-    expect(db.exec).toHaveBeenCalledTimes(5);
-    expect(db.exec).toHaveBeenCalledWith(expect.stringContaining("CREATE TABLE IF NOT EXISTS analytics_zone_hourly"));
-    expect(db.exec).toHaveBeenCalledWith(expect.stringContaining("CREATE TABLE IF NOT EXISTS analytics_sync_log"));
+    expect(db.prepare).toHaveBeenCalledTimes(5);
+    expect(db.prepare).toHaveBeenCalledWith(expect.stringContaining("CREATE TABLE IF NOT EXISTS analytics_zone_hourly"));
+    expect(db.prepare).toHaveBeenCalledWith(expect.stringContaining("CREATE TABLE IF NOT EXISTS analytics_sync_log"));
+    expect(run).toHaveBeenCalledTimes(5);
   });
 
   it("runs independently for distinct bindings", async () => {
+    const runA = vi.fn().mockResolvedValue(undefined);
+    const runB = vi.fn().mockResolvedValue(undefined);
     const dbA = {
-      exec: vi.fn().mockResolvedValue(undefined),
+      prepare: vi.fn(() => ({ run: runA })),
     } as unknown as D1Database;
     const dbB = {
-      exec: vi.fn().mockResolvedValue(undefined),
+      prepare: vi.fn(() => ({ run: runB })),
     } as unknown as D1Database;
 
     await ensureAnalyticsSchema(dbA);
     await ensureAnalyticsSchema(dbB);
 
-    expect(dbA.exec).toHaveBeenCalledTimes(5);
-    expect(dbB.exec).toHaveBeenCalledTimes(5);
+    expect(dbA.prepare).toHaveBeenCalledTimes(5);
+    expect(dbB.prepare).toHaveBeenCalledTimes(5);
+    expect(runA).toHaveBeenCalledTimes(5);
+    expect(runB).toHaveBeenCalledTimes(5);
   });
 });
