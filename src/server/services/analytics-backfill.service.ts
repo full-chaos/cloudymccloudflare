@@ -13,6 +13,9 @@ const ZONE_CHUNK_SIZE = 10;
 /** Minimum history retained in D1 so the 30d analytics view can populate. */
 const ANALYTICS_HISTORY_HOURS = 24 * 30;
 
+/** Cloudflare GraphQL analytics rejects per-zone ranges wider than 3 days. */
+const MAX_GRAPHQL_WINDOW_HOURS = 24 * 3;
+
 /**
  * Overlap (re-fetch) hours beyond the last success.
  * Belt-and-braces: the CF hourly bucket for the current hour is always partial
@@ -99,11 +102,19 @@ export async function runAnalyticsBackfill(env: Bindings): Promise<BackfillResul
       return { rowsUpserted: 0, zonesQueried: 0, windowStart: since, windowEnd: until };
     }
 
-    const chunks = chunk(zoneTags, ZONE_CHUNK_SIZE);
+    const zoneChunks = chunk(zoneTags, ZONE_CHUNK_SIZE);
+    const timeWindows = splitGraphQLWindows(since, until);
+
     // Run chunks in parallel — the CloudflareClient ConcurrencyQueue caps at 4.
     const chunkResults = await Promise.all(
-      chunks.map((tags) =>
-        cf.graphql<ZoneBatchResponse>(ZONE_BATCH_QUERY, { zoneTags: tags, since, until }),
+      zoneChunks.flatMap((tags) =>
+        timeWindows.map((window) =>
+          cf.graphql<ZoneBatchResponse>(ZONE_BATCH_QUERY, {
+            zoneTags: tags,
+            since: window.since,
+            until: window.until,
+          }),
+        ),
       ),
     );
 
@@ -202,6 +213,28 @@ export function resolveBackfillWindow(
   }
 
   return { since: targetSince.toISOString(), until };
+}
+
+export function splitGraphQLWindows(
+  since: string,
+  until: string,
+): Array<{ since: string; until: string }> {
+  const windows: Array<{ since: string; until: string }> = [];
+  const maxSpanMs = MAX_GRAPHQL_WINDOW_HOURS * 60 * 60 * 1000;
+
+  let cursor = new Date(since).getTime();
+  const end = new Date(until).getTime();
+
+  while (cursor <= end) {
+    const windowEnd = Math.min(cursor + maxSpanMs - 1, end);
+    windows.push({
+      since: new Date(cursor).toISOString(),
+      until: new Date(windowEnd).toISOString(),
+    });
+    cursor = windowEnd + 1;
+  }
+
+  return windows;
 }
 
 async function logRun(
