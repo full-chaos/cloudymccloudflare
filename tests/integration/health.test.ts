@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import app from "@server/index";
+// Default export was changed to `{fetch, scheduled}` for the Cron Trigger.
+// Hono's `.request()` lives on the named `app` export now.
+import { app } from "@server/index";
 
 describe("GET /api/health", () => {
   it("returns 200 with status ok", async () => {

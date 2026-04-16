@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import app from "@server/index";
+import { app } from "@server/index";
 import { createMockD1 } from "../helpers/mock-db";
 
 function makeEnv() {

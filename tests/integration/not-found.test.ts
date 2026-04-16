@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import app from "@server/index";
+import { app } from "@server/index";
 
 describe("404 handler", () => {
   it("returns 404 JSON for unknown routes", async () => {
