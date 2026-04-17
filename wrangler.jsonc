@@ -1,5 +1,5 @@
 {
-  "name": "cloudlymccloudflare",
+  "name": "cloudymccloudflare",
   "main": "src/server/index.ts",
   "compatibility_date": "2025-02-01",
   "assets": {
