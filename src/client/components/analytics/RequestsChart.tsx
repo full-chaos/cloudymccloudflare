@@ -32,7 +32,6 @@ export function RequestsChart({ series, metric }: RequestsChartProps) {
     () =>
       series.map((p) => ({
         timestamp: p.timestamp,
-        label: formatHourLabel(p.timestamp),
         value: p[metric],
       })),
     [series, metric],
@@ -58,11 +57,12 @@ export function RequestsChart({ series, metric }: RequestsChartProps) {
           </defs>
           <CartesianGrid stroke="#1f1f2e" strokeDasharray="2 2" vertical={false} />
           <XAxis
-            dataKey="label"
+            dataKey="timestamp"
             tick={{ fontSize: 10, fill: "#888" }}
             tickLine={false}
             axisLine={{ stroke: "#1f1f2e" }}
             minTickGap={20}
+            tickFormatter={formatHourLabel}
           />
           <YAxis
             tick={{ fontSize: 10, fill: "#888" }}
@@ -94,6 +94,7 @@ export function RequestsChart({ series, metric }: RequestsChartProps) {
             strokeWidth={2}
             fill={`url(#grad-${metric})`}
             isAnimationActive={false}
+            connectNulls={false}
           />
         </AreaChart>
       </ResponsiveContainer>

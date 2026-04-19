@@ -256,13 +256,8 @@ export async function getZoneAnalytics(
     )
     .orderBy(analyticsZoneHourly.hourBucket);
 
-  const series: ZoneTimeSeriesPoint[] = buckets.map((b) => ({
-    timestamp: b.hourBucket,
-    requests: b.requests,
-    bytes: b.bytes,
-    cachedBytes: b.cachedBytes,
-    threats: b.threats,
-  }));
+  const lastFetchedAt = await getLastFetchedAt(db);
+  const series: ZoneTimeSeriesPoint[] = fillHourlySeries(buckets, since, until, lastFetchedAt);
 
   const sampleInterval = buckets.reduce(
     (max, b) => Math.max(max, b.sampleInterval || 1),
@@ -273,10 +268,10 @@ export async function getZoneAnalytics(
     {
       zoneId,
       zoneName,
-      requests: series.reduce((s, p) => s + p.requests, 0),
-      bytes: series.reduce((s, p) => s + p.bytes, 0),
-      cachedBytes: series.reduce((s, p) => s + p.cachedBytes, 0),
-      threats: series.reduce((s, p) => s + p.threats, 0),
+      requests: buckets.reduce((s, b) => s + b.requests, 0),
+      bytes: buckets.reduce((s, b) => s + b.bytes, 0),
+      cachedBytes: buckets.reduce((s, b) => s + b.cachedBytes, 0),
+      threats: buckets.reduce((s, b) => s + b.threats, 0),
     },
   ]);
 
@@ -288,7 +283,7 @@ export async function getZoneAnalytics(
     zoneName,
     totals: zoneTotals,
     series,
-    lastFetchedAt: await getLastFetchedAt(db),
+    lastFetchedAt,
     sampleInterval,
   };
 }
@@ -348,6 +343,65 @@ function emptyTotals(): AccountTotals {
     threats: 0,
     cacheHitRatio: Number.NaN,
   };
+}
+
+/**
+ * Build a contiguous hourly series covering [since, until) — one entry per
+ * hour across the full window, so the chart's x-axis always spans the range
+ * picker's promise.
+ *
+ * Values are `null` outside the "fetched range" and numeric (real or zero)
+ * inside it. The fetched range is:
+ *   [earliest bucket in `buckets`, min(until, lastFetchedAt snapped to hour))
+ *
+ * Nulls become visible gaps in the chart (with `connectNulls={false}`) and
+ * keep Recharts' activeDot from pinning to a fake flat-zero region. Inside
+ * the fetched range, missing-bucket hours are zero — we asked CF and it
+ * returned nothing for that hour, so zero traffic is the correct inference.
+ *
+ * Timestamp key normalization: CF's `datetime` comes back as
+ * "2026-04-18T17:00:00Z" (no ms); `since`/`until` come from `toISOString()`
+ * (".000Z"). Equality fails across those formats — use epoch millis.
+ */
+const HOUR_MS = 60 * 60 * 1000;
+
+export function fillHourlySeries(
+  buckets: Array<{
+    hourBucket: string;
+    requests: number;
+    bytes: number;
+    cachedBytes: number;
+    threats: number;
+  }>,
+  since: string,
+  until: string,
+  lastFetchedAt: string | null,
+): ZoneTimeSeriesPoint[] {
+  const byEpoch = new Map(buckets.map((b) => [Date.parse(b.hourBucket), b] as const));
+  const startMs = Date.parse(since);
+  const endMs = Date.parse(until);
+  const fetchedStartMs = buckets.length > 0 ? Date.parse(buckets[0].hourBucket) : null;
+  const fetchedEndMs = lastFetchedAt
+    ? Math.floor(Date.parse(lastFetchedAt) / HOUR_MS) * HOUR_MS
+    : null;
+
+  const series: ZoneTimeSeriesPoint[] = [];
+  for (let ms = startMs; ms < endMs; ms += HOUR_MS) {
+    const inFetchedRange =
+      fetchedStartMs !== null &&
+      fetchedEndMs !== null &&
+      ms >= fetchedStartMs &&
+      ms < fetchedEndMs;
+    const b = byEpoch.get(ms);
+    series.push({
+      timestamp: new Date(ms).toISOString(),
+      requests: inFetchedRange ? b?.requests ?? 0 : null,
+      bytes: inFetchedRange ? b?.bytes ?? 0 : null,
+      cachedBytes: inFetchedRange ? b?.cachedBytes ?? 0 : null,
+      threats: inFetchedRange ? b?.threats ?? 0 : null,
+    });
+  }
+  return series;
 }
 
 async function getLastFetchedAt(db: Database): Promise<string | null> {

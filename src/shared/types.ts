@@ -179,10 +179,17 @@ export interface GroupAnalytics {
 
 export interface ZoneTimeSeriesPoint {
   timestamp: string; // ISO hour
-  requests: number;
-  bytes: number;
-  cachedBytes: number;
-  threats: number;
+  /**
+   * Metric values are `null` for hours outside the fetched range (before the
+   * first bucket we ever stored, or after the most recent backfill). Nulls
+   * render as gaps in the chart — critical for the activeDot not to pin to a
+   * fake flat-zero region. Inside the fetched range, missing-bucket hours are
+   * zero (no traffic) rather than null.
+   */
+  requests: number | null;
+  bytes: number | null;
+  cachedBytes: number | null;
+  threats: number | null;
 }
 
 export interface ZoneAnalytics {
