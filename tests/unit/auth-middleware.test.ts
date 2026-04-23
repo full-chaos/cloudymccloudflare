@@ -1,7 +1,16 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { authMiddleware } from "@server/middleware/auth";
 import type { Bindings } from "@server/types/env";
+
+vi.mock("@server/middleware/cf-access", () => ({
+  verifyCfAccessJwt: vi.fn(),
+}));
+import { verifyCfAccessJwt } from "@server/middleware/cf-access";
+
+beforeEach(() => {
+  vi.mocked(verifyCfAccessJwt).mockReset();
+});
 
 function createApp() {
   const app = new Hono<{ Bindings: Bindings }>();
@@ -24,6 +33,8 @@ function env(overrides: Partial<Bindings> = {}): Bindings {
     ENVIRONMENT: "development",
     CF_API_TOKEN: "",
     CF_ACCOUNT_ID: "",
+    TEAM_DOMAIN: "",
+    POLICY_AUD: "",
     DB: {} as D1Database,
     ...overrides,
   };
@@ -190,5 +201,106 @@ describe("authMiddleware", () => {
       env({ APP_SECRET: "secret123", ENVIRONMENT: "production" })
     );
     expect(res.status).toBe(401);
+  });
+
+  const cfAccessEnv = {
+    ENVIRONMENT: "production",
+    TEAM_DOMAIN: "https://team.cloudflareaccess.com",
+    POLICY_AUD: "aud123",
+  };
+
+  it("allows request with valid CF Access JWT", async () => {
+    vi.mocked(verifyCfAccessJwt).mockResolvedValueOnce({ email: "user@example.com" });
+    const app = createApp();
+    const res = await app.request(
+      req(
+        "/api/zones",
+        { headers: { "Cf-Access-Jwt-Assertion": "valid.jwt.token" } },
+        "https://example.com"
+      ),
+      {},
+      env(cfAccessEnv)
+    );
+    expect(res.status).toBe(200);
+    expect(verifyCfAccessJwt).toHaveBeenCalledWith(
+      "valid.jwt.token",
+      "https://team.cloudflareaccess.com",
+      "aud123"
+    );
+  });
+
+  it("rejects request with invalid CF Access JWT and no fallback secret", async () => {
+    vi.mocked(verifyCfAccessJwt).mockResolvedValueOnce(null);
+    const app = createApp();
+    const res = await app.request(
+      req(
+        "/api/zones",
+        { headers: { "Cf-Access-Jwt-Assertion": "bad.jwt.token" } },
+        "https://example.com"
+      ),
+      {},
+      env(cfAccessEnv)
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects request missing CF Access JWT when CF Access is the only configured auth", async () => {
+    const app = createApp();
+    const res = await app.request(
+      req("/api/zones", undefined, "https://example.com"),
+      {},
+      env(cfAccessEnv)
+    );
+    expect(res.status).toBe(401);
+    expect(verifyCfAccessJwt).not.toHaveBeenCalled();
+  });
+
+  it("falls back to APP_SECRET bearer when CF Access JWT is absent", async () => {
+    const app = createApp();
+    const res = await app.request(
+      req(
+        "/api/zones",
+        { headers: { Authorization: "Bearer secret123" } },
+        "https://example.com"
+      ),
+      {},
+      env({ ...cfAccessEnv, APP_SECRET: "secret123" })
+    );
+    expect(res.status).toBe(200);
+    expect(verifyCfAccessJwt).not.toHaveBeenCalled();
+  });
+
+  it("falls back to APP_SECRET bearer when CF Access JWT is invalid", async () => {
+    vi.mocked(verifyCfAccessJwt).mockResolvedValueOnce(null);
+    const app = createApp();
+    const res = await app.request(
+      req(
+        "/api/zones",
+        {
+          headers: {
+            "Cf-Access-Jwt-Assertion": "bad.jwt.token",
+            Authorization: "Bearer secret123",
+          },
+        },
+        "https://example.com"
+      ),
+      {},
+      env({ ...cfAccessEnv, APP_SECRET: "secret123" })
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("does not call JWT verifier when CF Access is not configured", async () => {
+    const app = createApp();
+    await app.request(
+      req(
+        "/api/zones",
+        { headers: { Authorization: "Bearer secret123" } },
+        "https://example.com"
+      ),
+      {},
+      env({ APP_SECRET: "secret123", ENVIRONMENT: "production" })
+    );
+    expect(verifyCfAccessJwt).not.toHaveBeenCalled();
   });
 });

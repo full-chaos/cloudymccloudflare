@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import type { Bindings } from "../types/env";
+import { verifyCfAccessJwt } from "./cf-access";
 
 const PLACEHOLDER_SECRET = "your_app_secret_here";
 
@@ -25,7 +26,6 @@ export function isLocalDevHost(hostname: string): boolean {
 }
 
 export const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
-  // Skip auth for health check endpoint
   const requestUrl = new URL(c.req.url);
   const path = requestUrl.pathname;
   if (path === "/api/health") {
@@ -38,52 +38,54 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (
     return next();
   }
 
-  const secret = c.env.APP_SECRET;
-  const isProduction = c.env.ENVIRONMENT === "production";
-  const secretConfigured = Boolean(secret) && secret !== PLACEHOLDER_SECRET;
+  const { TEAM_DOMAIN, POLICY_AUD, APP_SECRET, ENVIRONMENT } = c.env;
+  const isProduction = ENVIRONMENT === "production";
+  const cfAccessConfigured = Boolean(TEAM_DOMAIN) && Boolean(POLICY_AUD);
+  const secretConfigured = Boolean(APP_SECRET) && APP_SECRET !== PLACEHOLDER_SECRET;
 
-  // Local/dev bypass: only outside production AND when no real secret is set.
-  // In production we always fall through to the bearer check below, so a
-  // missing or placeholder APP_SECRET fails closed instead of granting access.
-  if (!isProduction && !secretConfigured) {
+  // Local/dev bypass: outside production AND no auth mechanism configured.
+  if (!isProduction && !cfAccessConfigured && !secretConfigured) {
     return next();
   }
 
-  // Production without a configured secret = misconfiguration. Reject every
-  // request rather than allow the placeholder value to act as a de facto key.
-  if (!secretConfigured) {
+  // Misconfiguration in production — neither mechanism set up. Fail closed.
+  if (!cfAccessConfigured && !secretConfigured) {
     return c.json(
       {
         success: false,
         errors: [{ code: 401, message: "Authentication not configured" }],
       },
-      401
+      401,
     );
   }
 
-  const authHeader = c.req.header("Authorization");
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return c.json(
-      {
-        success: false,
-        errors: [{ code: 401, message: "Missing or invalid Authorization header" }],
-      },
-      401
-    );
+  // Primary: Cloudflare Access JWT. Requests through CF Access carry
+  // `Cf-Access-Jwt-Assertion`; a valid signature for our team + AUD is proof
+  // the user satisfied the Access policy at the edge.
+  if (cfAccessConfigured) {
+    const cfJwt = c.req.header("Cf-Access-Jwt-Assertion");
+    if (cfJwt) {
+      const payload = await verifyCfAccessJwt(cfJwt, TEAM_DOMAIN, POLICY_AUD);
+      if (payload) {
+        return next();
+      }
+    }
   }
 
-  const token = authHeader.slice(7); // Remove "Bearer " prefix
-
-  if (!token || token !== secret) {
-    return c.json(
-      {
-        success: false,
-        errors: [{ code: 401, message: "Invalid token" }],
-      },
-      401
-    );
+  // Fallback: APP_SECRET bearer token — for CLI / scripts that bypass Access
+  // via a service token or hit the Worker directly.
+  if (secretConfigured) {
+    const authHeader = c.req.header("Authorization");
+    if (authHeader?.startsWith("Bearer ") && authHeader.slice(7) === APP_SECRET) {
+      return next();
+    }
   }
 
-  return next();
+  return c.json(
+    {
+      success: false,
+      errors: [{ code: 401, message: "Unauthorized" }],
+    },
+    401,
+  );
 };
