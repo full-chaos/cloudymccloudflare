@@ -29,7 +29,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ACCOUNT_ID, ZONES } from "../src/shared/constants";
+import { ACCOUNT_ID, ZONES } from "./fallback-zones";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -89,7 +89,7 @@ async function main(): Promise<void> {
       "wrangler",
       "d1",
       "execute",
-      "cloudlymccloudflare-db",
+      "cloudymccloudface",
       remote ? "--remote" : "--local",
       `--file=${sqlFile}`,
     ],
