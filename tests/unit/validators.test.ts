@@ -8,6 +8,7 @@ import {
   removeZonesFromGroupSchema,
   customRuleSchema,
   deployRulesSchema,
+  replaceWAFRulesSchema,
   updateZoneSettingSchema,
   createIPAccessRuleSchema,
   createTemplateSchema,
@@ -234,6 +235,51 @@ describe("deployRulesSchema", () => {
       target: { type: "zones", ids: ["z1"] },
       rules: [{ expression: "(true)", action: "block", description: "Test" }],
       mode: "merge",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("replaceWAFRulesSchema", () => {
+  it("accepts a rules array with multiple valid rules", () => {
+    const result = replaceWAFRulesSchema.safeParse({
+      rules: [
+        { expression: "(true)", action: "block", description: "A" },
+        { expression: "(false)", action: "log", description: "B", enabled: false },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.rules[0].enabled).toBe(true);
+      expect(result.data.rules[1].enabled).toBe(false);
+    }
+  });
+
+  it("accepts an empty rules array (clears the ruleset)", () => {
+    const result = replaceWAFRulesSchema.safeParse({ rules: [] });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects missing rules field", () => {
+    const result = replaceWAFRulesSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a non-array rules field", () => {
+    const result = replaceWAFRulesSchema.safeParse({ rules: "nope" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a rule with an invalid action", () => {
+    const result = replaceWAFRulesSchema.safeParse({
+      rules: [{ expression: "(true)", action: "destroy", description: "Test" }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a rule with an empty expression", () => {
+    const result = replaceWAFRulesSchema.safeParse({
+      rules: [{ expression: "", action: "block", description: "Test" }],
     });
     expect(result.success).toBe(false);
   });

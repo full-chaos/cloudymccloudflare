@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { Bindings } from "../types/env";
 import { CloudflareClient } from "../services/cloudflare";
 import { createDb, groupZones, zoneCache } from "../db";
@@ -8,6 +8,7 @@ import {
   customRuleSchema,
   deployRulesSchema,
   createIPAccessRuleSchema,
+  replaceWAFRulesSchema,
 } from "@shared/validators";
 import {
   getWAFRules,
@@ -50,16 +51,20 @@ security.post("/:zoneId/rules", zValidator(customRuleSchema), async (c) => {
 });
 
 // PUT /api/security/:zoneId/rules - replace all rules for a zone
-security.put("/:zoneId/rules", async (c) => {
+security.put("/:zoneId/rules", zValidator(replaceWAFRulesSchema), async (c) => {
   const { zoneId } = c.req.param();
-  const body = await c.req.json<{ rules: CFRule[] }>();
+  const { rules } = c.req.valid("json");
   const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
 
-  if (!Array.isArray(body.rules)) {
-    throw new HTTPException(400, { message: "rules must be an array" });
-  }
+  const cfRules: CFRule[] = rules.map((r) => ({
+    id: r.id,
+    action: r.action,
+    expression: r.expression,
+    description: r.description,
+    enabled: r.enabled,
+  }));
 
-  const updated = await cf.setCustomWAFRules(zoneId, body.rules);
+  const updated = await cf.setCustomWAFRules(zoneId, cfRules);
 
   return c.json({ success: true, result: updated });
 });
@@ -96,28 +101,13 @@ security.post("/deploy", zValidator(deployRulesSchema), async (c) => {
   if (target.type === "zones") {
     zoneIds = target.ids;
 
-    // Try to resolve zone names from cache
     const cachedZones = await db
       .select({ id: zoneCache.id, name: zoneCache.name })
       .from(zoneCache)
-      .where(
-        zoneIds.length === 1
-          ? eq(zoneCache.id, zoneIds[0])
-          : eq(zoneCache.id, zoneIds[0]) // Will be filled in loop below
-      );
+      .where(inArray(zoneCache.id, zoneIds));
 
     for (const zone of cachedZones) {
       zoneNameMap[zone.id] = zone.name;
-    }
-
-    // Fill any missing zone names from cache for multi-zone
-    if (zoneIds.length > 1) {
-      const allCached = await db.select({ id: zoneCache.id, name: zoneCache.name }).from(zoneCache);
-      for (const z of allCached) {
-        if (zoneIds.includes(z.id)) {
-          zoneNameMap[z.id] = z.name;
-        }
-      }
     }
   } else if (target.type === "group") {
     const groupId = target.ids[0];
