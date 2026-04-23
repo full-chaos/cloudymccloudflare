@@ -22,5 +22,5 @@
     "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["node_modules", "dist", "src/server/docker-entry.ts"]
+  "exclude": ["node_modules", "dist"]
 }

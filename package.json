@@ -5,12 +5,11 @@
   "type": "module",
   "scripts": {
     "login": "wrangler login",
+    "predev": "npm run db:seed",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "rm -rf dist && vite build && wrangler deploy",
-    "build:docker": "vite build && esbuild src/server/docker-entry.ts --bundle --platform=node --outdir=dist/server --external:better-sqlite3",
-    "docker:up": "docker compose up --build",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply cloudymccloudface --remote",
     "db:migrate:local": "wrangler d1 migrations apply cloudymccloudface --local",
