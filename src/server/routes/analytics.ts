@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings } from "../types/env";
 import { createDb } from "../db";
-import { ensureAnalyticsSchema } from "../db/ensure-analytics-schema";
-import { analyticsRangeSchema } from "@shared/validators";
+import { analyticsQuerySchema } from "@shared/validators";
+import { zValidatorQuery } from "../utils/zvalidator";
 import {
   getAccountAnalytics,
   getAnalyticsStatus,
@@ -14,23 +14,12 @@ import { runAnalyticsBackfill } from "../services/analytics-backfill.service";
 
 const analytics = new Hono<{ Bindings: Bindings }>();
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function parseRange(raw: string | undefined) {
-  const parsed = analyticsRangeSchema.safeParse(raw ?? "24h");
-  if (!parsed.success) {
-    throw new HTTPException(400, {
-      message: `Invalid range. Expected one of: 24h, 7d, 30d`,
-    });
-  }
-  return parsed.data;
-}
+const rangeQueryValidator = zValidatorQuery(analyticsQuerySchema);
 
 // ─── GET /api/analytics/account?range=24h|7d|30d ─────────────────────────────
 
-analytics.get("/account", async (c) => {
-  const range = parseRange(c.req.query("range"));
-  await ensureAnalyticsSchema(c.env.DB);
+analytics.get("/account", rangeQueryValidator, async (c) => {
+  const { range } = c.req.valid("query");
   const db = createDb(c.env.DB);
   const result = await getAccountAnalytics(db, range);
   return c.json({ success: true, result });
@@ -38,10 +27,9 @@ analytics.get("/account", async (c) => {
 
 // ─── GET /api/analytics/group/:groupId?range=... ─────────────────────────────
 
-analytics.get("/group/:groupId", async (c) => {
-  const range = parseRange(c.req.query("range"));
+analytics.get("/group/:groupId", rangeQueryValidator, async (c) => {
+  const { range } = c.req.valid("query");
   const { groupId } = c.req.param();
-  await ensureAnalyticsSchema(c.env.DB);
   const db = createDb(c.env.DB);
   const result = await getGroupAnalytics(db, groupId, range);
   if (!result) {
@@ -52,10 +40,9 @@ analytics.get("/group/:groupId", async (c) => {
 
 // ─── GET /api/analytics/zone/:zoneId?range=... ───────────────────────────────
 
-analytics.get("/zone/:zoneId", async (c) => {
-  const range = parseRange(c.req.query("range"));
+analytics.get("/zone/:zoneId", rangeQueryValidator, async (c) => {
+  const { range } = c.req.valid("query");
   const { zoneId } = c.req.param();
-  await ensureAnalyticsSchema(c.env.DB);
   const db = createDb(c.env.DB);
   const result = await getZoneAnalytics(db, zoneId, range);
   return c.json({ success: true, result });
@@ -64,7 +51,6 @@ analytics.get("/zone/:zoneId", async (c) => {
 // ─── GET /api/analytics/status ───────────────────────────────────────────────
 
 analytics.get("/status", async (c) => {
-  await ensureAnalyticsSchema(c.env.DB);
   const db = createDb(c.env.DB);
   const result = await getAnalyticsStatus(db);
   return c.json({ success: true, result });
@@ -75,7 +61,6 @@ analytics.get("/status", async (c) => {
 
 analytics.post("/refresh", async (c) => {
   try {
-    await ensureAnalyticsSchema(c.env.DB);
     const result = await runAnalyticsBackfill(c.env);
     return c.json({ success: true, result });
   } catch (err) {
