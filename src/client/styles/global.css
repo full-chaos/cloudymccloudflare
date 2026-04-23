@@ -1,29 +1,74 @@
-/* Tailwind v4 single-line import (replaces @tailwind base/components/utilities). */
+/*
+ * Tailwind 4 CSS-first entry point and the single source of truth for the
+ * dark-theme design tokens. Tokens declared in `@theme` are exposed two ways
+ * automatically: (1) as utility classes (`bg-bg-primary`, `text-text-muted`,
+ * `font-display`, `animate-fade-up`, …) and (2) as CSS custom properties on
+ * `:root` (`var(--color-bg-primary)`, `var(--font-display)`, …) for the
+ * hand-written rules below. That's why there is no `tailwind.config.ts` and
+ * no parallel `:root { --color-*: … }` block — one definition, both surfaces.
+ */
+
 @import "tailwindcss";
 
-/* Reuse the existing token config so class names (bg-bg-secondary, text-text-muted,
-   font-display, animate-fade-up, etc.) keep working across the app. */
-@config "../../../tailwind.config.ts";
+/* ─── Design tokens ─────────────────────────────────────────────────────────── */
 
-/* ─── CSS Custom Properties ─────────────────────────────────────────────────── */
-
-:root {
+@theme {
   --color-bg-primary: #0a0a0f;
   --color-bg-secondary: #111118;
   --color-bg-tertiary: #1a1a28;
+
   --color-border: #1f1f2e;
   --color-border-hover: #2a2a3a;
+
   --color-accent: #f97316;
   --color-accent-dim: rgba(249, 115, 22, 0.08);
   --color-accent-hover: #ea580c;
+
   --color-text-primary: #e0e0e8;
   --color-text-secondary: #888888;
   --color-text-muted: #555555;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-  --font-display: 'Outfit', sans-serif;
+
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+  --font-display: "Outfit", sans-serif;
+
+  --animate-fade-up: fadeUp 0.3s ease;
+  --animate-slide-in: slideIn 0.3s ease;
+  --animate-glow: glow 2s ease-in-out infinite;
+
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes glow {
+    0%,
+    100% {
+      box-shadow: 0 0 20px rgba(249, 115, 22, 0.15);
+    }
+    50% {
+      box-shadow: 0 0 40px rgba(249, 115, 22, 0.25);
+    }
+  }
 }
 
-/* ─── Base Styles ───────────────────────────────────────────────────────────── */
+/* ─── Base styles ───────────────────────────────────────────────────────────── */
 
 * {
   box-sizing: border-box;
@@ -42,7 +87,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ─── Scrollbar Styling ─────────────────────────────────────────────────────── */
+/* ─── Scrollbar styling ─────────────────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
   width: 6px;
@@ -67,80 +112,7 @@ body {
   scrollbar-color: var(--color-border-hover) var(--color-bg-primary);
 }
 
-/* ─── Animation Keyframes ───────────────────────────────────────────────────── */
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
-}
-
-@keyframes glow {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(249, 115, 22, 0.15);
-  }
-  50% {
-    box-shadow: 0 0 40px rgba(249, 115, 22, 0.25);
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* ─── Utility Classes ───────────────────────────────────────────────────────── */
-
-.animate-slide-in {
-  animation: slideIn 0.3s ease;
-}
-
-.animate-fade-up {
-  animation: fadeUp 0.3s ease;
-}
-
-.animate-glow {
-  animation: glow 2s ease-in-out infinite;
-}
-
-.animate-pulse-custom {
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-.animate-spin-custom {
-  animation: spin 0.8s linear infinite;
-}
-
-/* ─── Button Styles ─────────────────────────────────────────────────────────── */
+/* ─── Component classes ─────────────────────────────────────────────────────── */
 
 .btn-primary {
   background: linear-gradient(135deg, #f97316, #ea580c);
@@ -160,42 +132,4 @@ body {
 
 .btn-primary:active {
   transform: translateY(0);
-}
-
-/* ─── Card Styles ───────────────────────────────────────────────────────────── */
-
-.card {
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-}
-
-/* ─── Input Styles ──────────────────────────────────────────────────────────── */
-
-.input-base {
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-primary);
-  font-family: var(--font-display);
-  border-radius: 6px;
-  transition: border-color 0.2s ease;
-  outline: none;
-}
-
-.input-base:focus {
-  border-color: var(--color-accent);
-}
-
-.input-base::placeholder {
-  color: var(--color-text-muted);
-}
-
-/* ─── Font Utilities ────────────────────────────────────────────────────────── */
-
-.font-mono-data {
-  font-family: var(--font-mono);
-}
-
-.font-display-ui {
-  font-family: var(--font-display);
 }
