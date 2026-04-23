@@ -12,8 +12,19 @@ import type {
   CFIPAccessRule,
   CFCreateIPAccessRule,
 } from "../types/cloudflare";
+import type { Bindings } from "../types/env";
 
 const CF_API_BASE = "https://api.cloudflare.com/client/v4";
+
+type CloudflareAuthConfig = {
+  mode: "bearer" | "legacy-key";
+  headers: Record<string, string>;
+};
+
+type CloudflareClientOptions = {
+  email?: string;
+  apiKey?: string;
+};
 
 // ─── Rate Limit Queue ─────────────────────────────────────────────────────────
 
@@ -59,14 +70,33 @@ class ConcurrencyQueue {
 // ─── Cloudflare API Client ────────────────────────────────────────────────────
 
 export class CloudflareClient {
-  private apiToken: string;
   private accountId: string;
   private queue: ConcurrencyQueue;
+  private authConfigs: CloudflareAuthConfig[];
 
-  constructor(apiToken: string, accountId: string) {
-    this.apiToken = apiToken;
+  constructor(apiToken: string | undefined, accountId: string, options: CloudflareClientOptions = {}) {
     this.accountId = accountId;
     this.queue = new ConcurrencyQueue(4);
+    this.authConfigs = [];
+
+    if (apiToken) {
+      this.authConfigs.push({
+        mode: "bearer",
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+        },
+      });
+    }
+
+    if (options.email && options.apiKey) {
+      this.authConfigs.push({
+        mode: "legacy-key",
+        headers: {
+          "X-Auth-Email": options.email,
+          "X-Auth-Key": options.apiKey,
+        },
+      });
+    }
   }
 
   private async request<T>(
@@ -76,66 +106,67 @@ export class CloudflareClient {
     retries = 3
   ): Promise<T> {
     const url = `${CF_API_BASE}${path}`;
+    return this.withAuthFallback(async (headers) => {
+      const options: RequestInit = {
+        method,
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+        },
+      };
 
-    const options: RequestInit = {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.apiToken}`,
-        "Content-Type": "application/json",
-      },
-    };
+      if (body !== undefined && method !== "GET" && method !== "DELETE") {
+        options.body = JSON.stringify(body);
+      }
 
-    if (body !== undefined && method !== "GET" && method !== "DELETE") {
-      options.body = JSON.stringify(body);
-    }
+      let lastError: Error | null = null;
 
-    let lastError: Error | null = null;
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          const response = await fetch(url, options);
 
-    for (let attempt = 0; attempt < retries; attempt++) {
-      try {
-        const response = await fetch(url, options);
+          // Handle rate limiting with exponential backoff
+          if (response.status === 429) {
+            const retryAfter = response.headers.get("Retry-After");
+            const waitMs = retryAfter
+              ? parseInt(retryAfter, 10) * 1000
+              : Math.pow(2, attempt) * 1000;
 
-        // Handle rate limiting with exponential backoff
-        if (response.status === 429) {
-          const retryAfter = response.headers.get("Retry-After");
-          const waitMs = retryAfter
-            ? parseInt(retryAfter, 10) * 1000
-            : Math.pow(2, attempt) * 1000;
+            if (attempt < retries - 1) {
+              await sleep(waitMs);
+              continue;
+            }
+          }
+
+          // For DELETE with no body, just check success status
+          if (method === "DELETE" && response.status === 200) {
+            return undefined as T;
+          }
+
+          const data = (await response.json()) as CFApiResponse<T>;
+
+          if (!data.success) {
+            const errorMsg = data.errors
+              .map((e) => `[${e.code}] ${e.message}`)
+              .join("; ");
+            throw new CloudflareApiError(errorMsg, data.errors[0]?.code ?? 0, response.status);
+          }
+
+          return data.result;
+        } catch (err) {
+          if (err instanceof CloudflareApiError) {
+            throw err;
+          }
+          lastError = err instanceof Error ? err : new Error(String(err));
 
           if (attempt < retries - 1) {
-            await sleep(waitMs);
-            continue;
+            await sleep(Math.pow(2, attempt) * 500);
           }
         }
-
-        // For DELETE with no body, just check success status
-        if (method === "DELETE" && response.status === 200) {
-          return undefined as T;
-        }
-
-        const data = (await response.json()) as CFApiResponse<T>;
-
-        if (!data.success) {
-          const errorMsg = data.errors
-            .map((e) => `[${e.code}] ${e.message}`)
-            .join("; ");
-          throw new CloudflareApiError(errorMsg, data.errors[0]?.code ?? 0, response.status);
-        }
-
-        return data.result;
-      } catch (err) {
-        if (err instanceof CloudflareApiError) {
-          throw err;
-        }
-        lastError = err instanceof Error ? err : new Error(String(err));
-
-        if (attempt < retries - 1) {
-          await sleep(Math.pow(2, attempt) * 500);
-        }
       }
-    }
 
-    throw lastError ?? new Error(`Request to ${path} failed after ${retries} attempts`);
+      throw lastError ?? new Error(`Request to ${path} failed after ${retries} attempts`);
+    });
   }
 
   // ─── GraphQL (Analytics API) ────────────────────────────────────────────────
@@ -155,64 +186,65 @@ export class CloudflareClient {
     return this.queue.run(async () => {
       const url = `${CF_API_BASE}/graphql`;
       const body = JSON.stringify({ query, variables });
+      return this.withAuthFallback(async (headers) => {
+        let lastError: Error | null = null;
 
-      let lastError: Error | null = null;
+        for (let attempt = 0; attempt < retries; attempt++) {
+          try {
+            const response = await fetch(url, {
+              method: "POST",
+              headers: {
+                ...headers,
+                "Content-Type": "application/json",
+              },
+              body,
+            });
 
-      for (let attempt = 0; attempt < retries; attempt++) {
-        try {
-          const response = await fetch(url, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${this.apiToken}`,
-              "Content-Type": "application/json",
-            },
-            body,
-          });
+            if (response.status === 429) {
+              const retryAfter = response.headers.get("Retry-After");
+              const waitMs = retryAfter
+                ? parseInt(retryAfter, 10) * 1000
+                : Math.pow(2, attempt) * 1000;
+              if (attempt < retries - 1) {
+                await sleep(waitMs);
+                continue;
+              }
+            }
 
-          if (response.status === 429) {
-            const retryAfter = response.headers.get("Retry-After");
-            const waitMs = retryAfter
-              ? parseInt(retryAfter, 10) * 1000
-              : Math.pow(2, attempt) * 1000;
+            const payload = (await response.json()) as CFGraphQLResponse<T>;
+
+            if (payload.errors && payload.errors.length > 0) {
+              const errMsg = payload.errors.map((e) => e.message).join("; ");
+              throw new CloudflareApiError(
+                `GraphQL error: ${errMsg}`,
+                0,
+                response.status,
+              );
+            }
+
+            if (!response.ok || !payload.data) {
+              throw new CloudflareApiError(
+                `GraphQL request failed (HTTP ${response.status})`,
+                0,
+                response.status,
+              );
+            }
+
+            return payload.data;
+          } catch (err) {
+            if (err instanceof CloudflareApiError) {
+              // Don't retry auth/schema errors (we'd just keep failing).
+              throw err;
+            }
+            lastError = err instanceof Error ? err : new Error(String(err));
             if (attempt < retries - 1) {
-              await sleep(waitMs);
-              continue;
+              await sleep(Math.pow(2, attempt) * 500);
             }
           }
-
-          const payload = (await response.json()) as CFGraphQLResponse<T>;
-
-          if (payload.errors && payload.errors.length > 0) {
-            const errMsg = payload.errors.map((e) => e.message).join("; ");
-            throw new CloudflareApiError(
-              `GraphQL error: ${errMsg}`,
-              0,
-              response.status,
-            );
-          }
-
-          if (!response.ok || !payload.data) {
-            throw new CloudflareApiError(
-              `GraphQL request failed (HTTP ${response.status})`,
-              0,
-              response.status,
-            );
-          }
-
-          return payload.data;
-        } catch (err) {
-          if (err instanceof CloudflareApiError) {
-            // Don't retry auth/schema errors (we'd just keep failing).
-            throw err;
-          }
-          lastError = err instanceof Error ? err : new Error(String(err));
-          if (attempt < retries - 1) {
-            await sleep(Math.pow(2, attempt) * 500);
-          }
         }
-      }
 
-      throw lastError ?? new Error(`GraphQL request failed after ${retries} attempts`);
+        throw lastError ?? new Error(`GraphQL request failed after ${retries} attempts`);
+      });
     });
   }
 
@@ -470,59 +502,103 @@ export class CloudflareClient {
     retries = 3,
   ): Promise<CFApiResponse<T>> {
     const url = `${CF_API_BASE}${path}`;
+    return this.withAuthFallback(async (headers) => {
+      const options: RequestInit = {
+        method,
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+        },
+      };
 
-    const options: RequestInit = {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.apiToken}`,
-        "Content-Type": "application/json",
-      },
-    };
+      if (body !== undefined && method !== "GET" && method !== "DELETE") {
+        options.body = JSON.stringify(body);
+      }
 
-    if (body !== undefined && method !== "GET" && method !== "DELETE") {
-      options.body = JSON.stringify(body);
+      let lastError: Error | null = null;
+
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          const response = await fetch(url, options);
+
+          if (response.status === 429) {
+            const retryAfter = response.headers.get("Retry-After");
+            const waitMs = retryAfter
+              ? parseInt(retryAfter, 10) * 1000
+              : Math.pow(2, attempt) * 1000;
+
+            if (attempt < retries - 1) {
+              await sleep(waitMs);
+              continue;
+            }
+          }
+
+          const data = (await response.json()) as CFApiResponse<T>;
+
+          if (!data.success) {
+            const errorMsg = data.errors.map((e) => `[${e.code}] ${e.message}`).join("; ");
+            throw new CloudflareApiError(errorMsg, data.errors[0]?.code ?? 0, response.status);
+          }
+
+          return data;
+        } catch (err) {
+          if (err instanceof CloudflareApiError) {
+            throw err;
+          }
+          lastError = err instanceof Error ? err : new Error(String(err));
+
+          if (attempt < retries - 1) {
+            await sleep(Math.pow(2, attempt) * 500);
+          }
+        }
+      }
+
+      throw lastError ?? new Error(`Request to ${path} failed after ${retries} attempts`);
+    });
+  }
+
+  private async withAuthFallback<T>(
+    run: (headers: Record<string, string>) => Promise<T>,
+  ): Promise<T> {
+    if (this.authConfigs.length === 0) {
+      throw new Error("No Cloudflare API credentials configured");
     }
 
     let lastError: Error | null = null;
 
-    for (let attempt = 0; attempt < retries; attempt++) {
+    for (let index = 0; index < this.authConfigs.length; index++) {
+      const auth = this.authConfigs[index];
       try {
-        const response = await fetch(url, options);
-
-        if (response.status === 429) {
-          const retryAfter = response.headers.get("Retry-After");
-          const waitMs = retryAfter
-            ? parseInt(retryAfter, 10) * 1000
-            : Math.pow(2, attempt) * 1000;
-
-          if (attempt < retries - 1) {
-            await sleep(waitMs);
-            continue;
-          }
-        }
-
-        const data = (await response.json()) as CFApiResponse<T>;
-
-        if (!data.success) {
-          const errorMsg = data.errors.map((e) => `[${e.code}] ${e.message}`).join("; ");
-          throw new CloudflareApiError(errorMsg, data.errors[0]?.code ?? 0, response.status);
-        }
-
-        return data;
+        return await run(auth.headers);
       } catch (err) {
-        if (err instanceof CloudflareApiError) {
-          throw err;
-        }
-        lastError = err instanceof Error ? err : new Error(String(err));
+        const error = err instanceof Error ? err : new Error(String(err));
+        lastError = error;
 
-        if (attempt < retries - 1) {
-          await sleep(Math.pow(2, attempt) * 500);
+        if (
+          err instanceof CloudflareApiError &&
+          index < this.authConfigs.length - 1 &&
+          isAuthHeaderError(err)
+        ) {
+          continue;
         }
+
+        throw error;
       }
     }
 
-    throw lastError ?? new Error(`Request to ${path} failed after ${retries} attempts`);
+    throw lastError ?? new Error("Cloudflare API request failed");
   }
+}
+
+export function createCloudflareClient(env: Pick<Bindings, "CF_ACCOUNT_ID"> & {
+  CF_API_TOKEN?: string;
+  CLOUDFLARE_EMAIL?: string;
+  CLOUDFLARE_API_KEY?: string;
+}): CloudflareClient {
+  return new CloudflareClient(env.CF_API_TOKEN, env.CF_ACCOUNT_ID, {
+    email: env.CLOUDFLARE_EMAIL,
+    apiKey: env.CLOUDFLARE_API_KEY,
+  });
 }
 
 // ─── GraphQL Response Envelope ───────────────────────────────────────────────
@@ -549,4 +625,17 @@ export class CloudflareApiError extends Error {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isAuthHeaderError(error: CloudflareApiError): boolean {
+  const message = error.message.toLowerCase();
+  return (
+    error.code === 6003 ||
+    error.code === 10000 ||
+    error.statusCode === 401 ||
+    error.statusCode === 403 ||
+    message.includes("authentication failed") ||
+    message.includes("invalid request headers") ||
+    message.includes("invalid access token")
+  );
 }

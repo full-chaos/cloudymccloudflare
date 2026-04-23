@@ -2,7 +2,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import type { Bindings } from "../types/env";
 import { createDb } from "../db";
 import { analyticsZoneHourly, analyticsSyncLog } from "../db/schema";
-import { CloudflareClient } from "./cloudflare";
+import { createCloudflareClient } from "./cloudflare";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ export interface BackfillResult {
  */
 export async function runAnalyticsBackfill(env: Bindings): Promise<BackfillResult> {
   const db = createDb(env.DB);
-  const cf = new CloudflareClient(env.CF_API_TOKEN, env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(env);
   const startedAt = new Date().toISOString();
 
   try {

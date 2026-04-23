@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { eq, inArray } from "drizzle-orm";
 import type { Bindings } from "../types/env";
-import { CloudflareClient } from "../services/cloudflare";
+import { createCloudflareClient } from "../services/cloudflare";
 import { createDb, groupZones, zoneCache } from "../db";
 import {
   customRuleSchema,
@@ -23,7 +23,7 @@ const security = new Hono<{ Bindings: Bindings }>();
 // GET /api/security/:zoneId/rules - get WAF rules for a zone
 security.get("/:zoneId/rules", async (c) => {
   const { zoneId } = c.req.param();
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   const ruleset = await getWAFRules(cf, zoneId);
 
@@ -34,7 +34,7 @@ security.get("/:zoneId/rules", async (c) => {
 security.post("/:zoneId/rules", zValidator(customRuleSchema), async (c) => {
   const { zoneId } = c.req.param();
   const rule = c.req.valid("json");
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   // Get existing ruleset and append
   const existing = await cf.getCustomWAFRules(zoneId);
@@ -54,7 +54,7 @@ security.post("/:zoneId/rules", zValidator(customRuleSchema), async (c) => {
 security.put("/:zoneId/rules", zValidator(replaceWAFRulesSchema), async (c) => {
   const { zoneId } = c.req.param();
   const { rules } = c.req.valid("json");
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   const cfRules: CFRule[] = rules.map((r) => ({
     id: r.id,
@@ -72,7 +72,7 @@ security.put("/:zoneId/rules", zValidator(replaceWAFRulesSchema), async (c) => {
 // DELETE /api/security/:zoneId/rules/:ruleId - delete a specific rule
 security.delete("/:zoneId/rules/:ruleId", async (c) => {
   const { zoneId, ruleId } = c.req.param();
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   const existing = await cf.getCustomWAFRules(zoneId);
   const filtered = existing.rules.filter((r) => r.id !== ruleId);
@@ -93,7 +93,7 @@ security.post("/deploy", zValidator(deployRulesSchema), async (c) => {
   // per-zone deploy results.
   const { target, rules, mode } = c.req.valid("json");
   const db = createDb(c.env.DB);
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   let zoneIds: string[] = [];
   const zoneNameMap: Record<string, string> = {};
@@ -165,7 +165,7 @@ security.get("/deployments", async (c) => {
 // GET /api/security/ip-rules/:zoneId - IP access rules
 security.get("/ip-rules/:zoneId", async (c) => {
   const { zoneId } = c.req.param();
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   const rules = await cf.listIPAccessRules(zoneId);
 
@@ -176,7 +176,7 @@ security.get("/ip-rules/:zoneId", async (c) => {
 security.post("/ip-rules/:zoneId", zValidator(createIPAccessRuleSchema), async (c) => {
   const { zoneId } = c.req.param();
   const data = c.req.valid("json");
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   const rule = await cf.createIPAccessRule(zoneId, {
     mode: data.mode,

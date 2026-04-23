@@ -60,6 +60,15 @@ interface CFZonesResponse {
   result_info?: { page: number; total_pages: number };
 }
 
+interface DevVars {
+  CF_API_TOKEN?: string;
+  CF_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_EMAIL?: string;
+  CLOUDFLARE_API_KEY?: string;
+}
+
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -102,20 +111,30 @@ async function main(): Promise<void> {
 
 async function loadZones(): Promise<SeedZone[]> {
   const vars = parseDevVars(".dev.vars");
-  const token = vars.CF_API_TOKEN;
-  if (!token || token === "your_cf_api_token_here") {
-    console.log("No CF_API_TOKEN in .dev.vars — using static ZONES fallback.");
+  const accountId =
+    vars.CF_ACCOUNT_ID ||
+    vars.CLOUDFLARE_ACCOUNT_ID ||
+    ACCOUNT_ID;
+  const authCandidates = getCloudflareAuthCandidates(vars);
+  if (authCandidates.length === 0) {
+    console.log("No Cloudflare API credentials in .dev.vars — using static ZONES fallback.");
     return fromStatic();
   }
 
-  try {
-    console.log("Fetching zones from Cloudflare API…");
-    return await fromCloudflare(token);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`CF fetch failed (${msg}); falling back to static ZONES.`);
-    return fromStatic();
+  console.log("Fetching zones from Cloudflare API…");
+
+  const failures: string[] = [];
+  for (const auth of authCandidates) {
+    try {
+      return await fromCloudflare(accountId, auth);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      failures.push(msg);
+    }
   }
+
+  console.warn(`CF fetch failed (${failures.join(" | ")}); falling back to static ZONES.`);
+  return fromStatic();
 }
 
 function fromStatic(): SeedZone[] {
@@ -132,21 +151,54 @@ function fromStatic(): SeedZone[] {
   }));
 }
 
-async function fromCloudflare(token: string): Promise<SeedZone[]> {
+type CloudflareAuth =
+  | {
+      mode: "bearer";
+      headers: { Authorization: string };
+    }
+  | {
+      mode: "legacy-key";
+      headers: { "X-Auth-Email": string; "X-Auth-Key": string };
+    };
+
+function getCloudflareAuthCandidates(vars: DevVars): CloudflareAuth[] {
+  const auth: CloudflareAuth[] = [];
+  const token = vars.CF_API_TOKEN || vars.CLOUDFLARE_API_TOKEN;
+  if (token && token !== "your_cf_api_token_here") {
+    auth.push({
+      mode: "bearer",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
+
+  if (vars.CLOUDFLARE_EMAIL && vars.CLOUDFLARE_API_KEY) {
+    auth.push({
+      mode: "legacy-key",
+      headers: {
+        "X-Auth-Email": vars.CLOUDFLARE_EMAIL,
+        "X-Auth-Key": vars.CLOUDFLARE_API_KEY,
+      },
+    });
+  }
+
+  return auth;
+}
+
+async function fromCloudflare(accountId: string, auth: CloudflareAuth): Promise<SeedZone[]> {
   const base = "https://api.cloudflare.com/client/v4/zones";
   const perPage = 50;
   const out: SeedZone[] = [];
   let page = 1;
 
   while (true) {
-    const url = `${base}?account.id=${ACCOUNT_ID}&page=${page}&per_page=${perPage}&status=active`;
+    const url = `${base}?account.id=${accountId}&page=${page}&per_page=${perPage}&status=active`;
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: auth.headers,
     });
     const payload = (await res.json()) as CFZonesResponse;
     if (!payload.success || !payload.result) {
       const msg = payload.errors?.map((e) => `[${e.code}] ${e.message}`).join("; ") ?? res.statusText;
-      throw new Error(`CF API error: ${msg}`);
+      throw new Error(`CF API error via ${auth.mode}: ${msg}`);
     }
 
     for (const z of payload.result) {
@@ -174,7 +226,7 @@ async function fromCloudflare(token: string): Promise<SeedZone[]> {
 // ─── .dev.vars parser ─────────────────────────────────────────────────────────
 // Minimal KEY=value reader — matches the `.env`-style format wrangler uses.
 
-function parseDevVars(filePath: string): Record<string, string> {
+function parseDevVars(filePath: string): DevVars {
   if (!existsSync(filePath)) return {};
   const out: Record<string, string> = {};
   for (const raw of readFileSync(filePath, "utf8").split("\n")) {

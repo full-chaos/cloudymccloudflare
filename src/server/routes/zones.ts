@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, inArray } from "drizzle-orm";
 import type { Bindings } from "../types/env";
-import { CloudflareClient } from "../services/cloudflare";
+import { CloudflareClient, createCloudflareClient } from "../services/cloudflare";
 import { createDb, zoneCache } from "../db";
 import { updateZoneSettingSchema } from "@shared/validators";
 import { zValidator } from "../utils/zvalidator";
@@ -12,7 +12,7 @@ const zones = new Hono<{ Bindings: Bindings }>();
 // GET /api/zones - list all zones (from CF API, cached in D1)
 zones.get("/", async (c) => {
   const db = createDb(c.env.DB);
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   // Try to serve from cache first (only if cache is recent enough)
   const cachedZones = await db.select().from(zoneCache).orderBy(zoneCache.name);
@@ -73,7 +73,7 @@ zones.get("/", async (c) => {
 // GET /api/zones/:zoneId - zone detail
 zones.get("/:zoneId", async (c) => {
   const { zoneId } = c.req.param();
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   const zone = await cf.getZone(zoneId);
 
@@ -97,7 +97,7 @@ zones.get("/:zoneId", async (c) => {
 // GET /api/zones/:zoneId/settings - zone settings
 zones.get("/:zoneId/settings", async (c) => {
   const { zoneId } = c.req.param();
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   const settings = await cf.getZoneSettings(zoneId);
 
@@ -111,7 +111,7 @@ zones.patch(
   async (c) => {
     const { zoneId } = c.req.param();
     const body = c.req.valid("json");
-    const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+    const cf = createCloudflareClient(c.env);
 
     const updated = await cf.updateZoneSetting(zoneId, body.id, body.value);
 
@@ -122,7 +122,7 @@ zones.patch(
 // POST /api/zones/sync - force re-sync zone cache
 zones.post("/sync", async (c) => {
   const db = createDb(c.env.DB);
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   const cfZones = await cf.listZones();
   const cachedZones = await db.select({ id: zoneCache.id }).from(zoneCache);

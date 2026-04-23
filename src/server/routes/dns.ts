@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { eq } from "drizzle-orm";
 import type { Bindings } from "../types/env";
-import { CloudflareClient } from "../services/cloudflare";
+import { createCloudflareClient } from "../services/cloudflare";
 import { createDb, groupZones } from "../db";
 import {
   createDNSRecordSchema,
@@ -24,7 +24,7 @@ const dns = new Hono<{ Bindings: Bindings }>();
 // GET /api/dns/:zoneId - list records
 dns.get("/:zoneId", async (c) => {
   const { zoneId } = c.req.param();
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   const records = await getDNSRecords(cf, zoneId);
 
@@ -35,7 +35,7 @@ dns.get("/:zoneId", async (c) => {
 dns.post("/:zoneId", zValidator(createDNSRecordSchema), async (c) => {
   const { zoneId } = c.req.param();
   const data = c.req.valid("json");
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   const record = await createRecord(cf, zoneId, data);
 
@@ -46,7 +46,7 @@ dns.post("/:zoneId", zValidator(createDNSRecordSchema), async (c) => {
 dns.patch("/:zoneId/:recordId", zValidator(updateDNSRecordSchema), async (c) => {
   const { zoneId, recordId } = c.req.param();
   const data = c.req.valid("json");
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   const record = await updateRecord(cf, zoneId, recordId, data);
 
@@ -56,7 +56,7 @@ dns.patch("/:zoneId/:recordId", zValidator(updateDNSRecordSchema), async (c) => 
 // DELETE /api/dns/:zoneId/:recordId - delete record
 dns.delete("/:zoneId/:recordId", async (c) => {
   const { zoneId, recordId } = c.req.param();
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   await deleteRecord(cf, zoneId, recordId);
 
@@ -66,7 +66,7 @@ dns.delete("/:zoneId/:recordId", async (c) => {
 // POST /api/dns/batch - batch apply to multiple zones
 dns.post("/batch", zValidator(batchApplyDNSSchema), async (c) => {
   const { zoneIds, records } = c.req.valid("json");
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   const results = await batchApplyRecords(cf, zoneIds, {
     posts: records.posts,
@@ -81,7 +81,7 @@ dns.post("/batch", zValidator(batchApplyDNSSchema), async (c) => {
 dns.post("/batch-by-group", zValidator(batchApplyDNSByGroupSchema), async (c) => {
   const { groupId, records } = c.req.valid("json");
   const db = createDb(c.env.DB);
-  const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
+  const cf = createCloudflareClient(c.env);
 
   // Resolve zone IDs from group
   const zoneRows = await db
