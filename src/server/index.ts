@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import type { Bindings } from "./types/env";
 import { authMiddleware } from "./middleware/auth";
@@ -17,18 +16,19 @@ export const app = new Hono<{ Bindings: Bindings }>();
 
 // ─── Global Middleware ────────────────────────────────────────────────────────
 
-app.use(
-  "*",
-  cors({
-    origin: "*",
-    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
-    exposeHeaders: ["Content-Length"],
-    maxAge: 3600,
-  })
-);
+// No CORS middleware: the Worker serves both the SPA (wrangler.jsonc
+// `assets.directory`) and `/api/*` from the same origin, so browser requests
+// never cross-origin. If a cross-origin consumer is ever introduced, mount
+// `cors()` here with an explicit allowlist — not `origin: "*"`.
 
-app.use("*", logger());
+// Dev-only request logger; Workers has native request analytics in production.
+const requestLogger = logger();
+app.use("*", async (c, next) => {
+  if (c.env.ENVIRONMENT !== "production") {
+    return requestLogger(c, next);
+  }
+  return next();
+});
 
 // Auth middleware applied to all /api/* routes
 app.use("/api/*", authMiddleware);
