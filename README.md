@@ -8,7 +8,7 @@ Multi-zone Cloudflare management dashboard. Manage DNS records, WAF/security rul
 
 | Layer    | Technology                                 |
 | -------- | ------------------------------------------ |
-| Frontend | React 19, Tailwind CSS 3, Vite 6           |
+| Frontend | React 19, Tailwind CSS 4, Vite 8           |
 | Backend  | Hono (Cloudflare Workers), Drizzle ORM     |
 | Database | Cloudflare D1 (SQLite)                     |
 | Runtime  | Cloudflare Workers (prod), Miniflare (dev) |
@@ -64,7 +64,7 @@ CF_ACCOUNT_ID=your_account_id_here
 APP_SECRET=your_app_secret_here
 ```
 
-`APP_SECRET` protects the API in production. In local dev, auth is bypassed when `APP_SECRET` is unset or equals the placeholder value.
+`APP_SECRET` protects the API in production. In local dev, auth is bypassed for localhost and private-network requests so the browser can call `/api/*` without injecting an `Authorization` header.
 
 ## Environment Variables
 
@@ -92,7 +92,7 @@ cloudy-mccloudflare/
 │   │   ├── hooks/               # React hooks (useZones, useDNS, etc.)
 │   │   ├── lib/api.ts           # Client HTTP layer → /api/* routes
 │   │   ├── types/               # Client-specific types
-│   │   └── styles/global.css    # Tailwind entry
+│   │   └── styles/global.css    # Tailwind 4 entry + @theme design tokens
 │   ├── server/                  # Hono Workers backend
 │   │   ├── routes/              # API route handlers
 │   │   │   ├── zones.ts         # GET /api/zones, zone detail, settings
@@ -125,7 +125,7 @@ cloudy-mccloudflare/
 ├── wrangler.jsonc               # Workers + D1 config
 ├── vite.config.ts               # Vite + @cloudflare/vite-plugin
 ├── drizzle.config.ts            # Drizzle Kit config
-├── tailwind.config.ts
+├── postcss.config.js            # @tailwindcss/postcss (Tailwind 4 entry)
 ├── tsconfig.json
 └── package.json
 ```
@@ -210,7 +210,13 @@ cloudflare({
 
 ### Auth
 
-In production, all `/api/*` routes (except `/api/health`) require a `Bearer <APP_SECRET>` header. In local dev, auth is automatically bypassed when `APP_SECRET` is unset or equals the placeholder.
+In production, all `/api/*` routes (except `/api/health`) require a `Bearer <APP_SECRET>` header. In local dev, auth is automatically bypassed for localhost and private-network requests.
+
+`GET /api/health` also reports whether that bypass is active for the current request host via `result.auth.localBypassActive`, which makes local/prod auth behavior easy to confirm from the browser or `curl`.
+
+### Styling (Tailwind 4 CSS-first)
+
+All design tokens (colors, fonts, animation keyframes) live in `src/client/styles/global.css` inside a single `@theme` block. Tailwind 4 generates both the utility classes (`bg-bg-primary`, `font-display`, `animate-fade-up`) and the matching `:root` CSS custom properties (`var(--color-bg-primary)`, `var(--font-display)`) from those declarations, so there is no separate `tailwind.config.ts` and no parallel `:root { --color-*: … }` block. Add new tokens to `@theme` rather than re-introducing a JS config.
 
 ## Deployment
 
