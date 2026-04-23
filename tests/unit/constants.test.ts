@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DNS_RECORD_TYPES, RULE_TEMPLATES, GROUP_COLORS, ZONES } from "@shared/constants";
+import { DNS_RECORD_TYPES, RULE_TEMPLATES, GROUP_COLORS } from "@shared/constants";
 
 describe("constants", () => {
   describe("DNS_RECORD_TYPES", () => {
@@ -38,16 +38,6 @@ describe("constants", () => {
     it("all colors are valid hex", () => {
       for (const color of GROUP_COLORS) {
         expect(color).toMatch(/^#[0-9a-fA-F]{6}$/);
-      }
-    });
-  });
-
-  describe("ZONES", () => {
-    it("has zone entries with id and name", () => {
-      expect(ZONES.length).toBeGreaterThan(0);
-      for (const zone of ZONES) {
-        expect(zone.id).toBeTruthy();
-        expect(zone.name).toBeTruthy();
       }
     });
   });
