@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { ViewType, CreateDNSInput, DNSRecord } from "./types";
 import { AppShell } from "./components/layout/AppShell";
 import { DashboardView } from "./components/dashboard/DashboardView";
@@ -93,9 +93,31 @@ export default function App() {
     [fetchRecords]
   );
 
-  // Group select from sidebar
-  const handleGroupSelect = useCallback((groupId: string) => {
-    setSelectedGroupId(groupId);
+  // Group select from sidebar — filter DNS zones to the group and jump to its first zone
+  const handleGroupSelect = useCallback(
+    (groupId: string) => {
+      setSelectedGroupId(groupId);
+      const group = groups.find((g) => g.id === groupId);
+      const firstZoneId = group?.zoneIds[0];
+      if (firstZoneId) {
+        setSelectedZoneId(firstZoneId);
+        fetchRecords(firstZoneId);
+      } else {
+        setSelectedZoneId(null);
+      }
+    },
+    [groups, fetchRecords]
+  );
+
+  // Zones visible in DNS view — filtered to the selected group, or all zones if none
+  const dnsZones = useMemo(() => {
+    if (!selectedGroupId) return zones;
+    const group = groups.find((g) => g.id === selectedGroupId);
+    return group ? zones.filter((z) => group.zoneIds.includes(z.id)) : zones;
+  }, [zones, groups, selectedGroupId]);
+
+  const handleClearGroupFilter = useCallback(() => {
+    setSelectedGroupId(undefined);
   }, []);
 
   // DNS operations
@@ -143,15 +165,17 @@ export default function App() {
       case "dns":
         return (
           <DNSView
-            zones={zones}
+            zones={dnsZones}
             groups={groups}
             records={records}
             loadingRecords={recordsLoading}
             addingRecord={false}
             currentZoneId={selectedZoneId ?? currentZoneId}
+            activeGroupId={selectedGroupId}
             onSelectZone={handleSelectZone}
             onCreateRecord={handleCreateRecord}
             onDeleteRecord={handleDeleteRecord}
+            onClearGroupFilter={handleClearGroupFilter}
             onToast={addToast}
           />
         );

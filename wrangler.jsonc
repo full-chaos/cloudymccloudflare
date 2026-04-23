@@ -4,23 +4,32 @@
   "compatibility_date": "2025-02-01",
   "assets": {
     "directory": "./dist/client",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
   },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "cloudlymccloudflare-db",
-      "database_id": "7a42abbe-ef6e-42b0-b016-2e7a34128424"
-    }
+      // Actual DB name on the account is `cloudymccloudface` (Boaty McBoatface
+      // style — MC CloudFace, not CloudFlare). wrangler binds by UUID so the
+      // label is cosmetic, but matching it here keeps the dashboard and
+      // CLI `wrangler d1 <subcmd> <name>` calls in sync.
+      "database_name": "cloudymccloudface",
+      "database_id": "7a42abbe-ef6e-42b0-b016-2e7a34128424",
+      // `npm run dev` runs the Worker locally but proxies DB calls to the
+      // real D1 on Cloudflare's edge. Flip to `false` to iterate against
+      // the local `.wrangler/state` SQLite — e.g. when testing a destructive
+      // migration or a new feature that shouldn't touch prod.
+      "remote": false,
+    },
   ],
   "vars": {
     "ENVIRONMENT": "production",
-    "CF_ACCOUNT_ID": "f39dbcd4130fd731be7f0f77bf013e01"
+    "CF_ACCOUNT_ID": "f39dbcd4130fd731be7f0f77bf013e01",
   },
   // Analytics backfill: fetch fresh per-zone hourly buckets every 15 minutes.
   // Runs src/server/index.ts `scheduled` export → runAnalyticsBackfill().
   "triggers": {
-    "crons": ["*/15 * * * *"]
-  }
+    "crons": ["*/15 * * * *"],
+  },
   // CF_API_TOKEN and APP_SECRET go in .dev.vars (local) and Workers Secrets (prod)
 }

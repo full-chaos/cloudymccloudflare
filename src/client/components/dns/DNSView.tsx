@@ -271,9 +271,11 @@ interface DNSViewProps {
   loadingRecords: boolean;
   addingRecord: boolean;
   currentZoneId: string | null;
+  activeGroupId?: string;
   onSelectZone: (zoneId: string) => void;
   onCreateRecord: (zoneId: string, input: CreateDNSInput) => Promise<DNSRecord>;
   onDeleteRecord: (zoneId: string, recordId: string) => Promise<void>;
+  onClearGroupFilter?: () => void;
   onToast: (message: string, type?: ToastType) => void;
 }
 
@@ -283,9 +285,11 @@ export function DNSView({
   records,
   loadingRecords,
   currentZoneId,
+  activeGroupId,
   onSelectZone,
   onCreateRecord,
   onDeleteRecord,
+  onClearGroupFilter,
   onToast,
 }: DNSViewProps) {
   const [batchMode, setBatchMode] = useState(false);
@@ -295,6 +299,7 @@ export function DNSView({
   const [deleting, setDeleting] = useState(false);
 
   const currentZone = zones.find((z) => z.id === currentZoneId);
+  const activeGroup = activeGroupId ? groups.find((g) => g.id === activeGroupId) : null;
 
   // Auto-select first zone
   useEffect(() => {
@@ -336,7 +341,7 @@ export function DNSView({
       <div className="w-52 flex-shrink-0 border-r border-border bg-bg-primary overflow-y-auto">
         <div className="px-3 py-3 border-b border-border">
           <span className="text-[10px] font-semibold font-display text-text-muted uppercase tracking-wider">
-            Zones ({zones.length})
+            {activeGroup ? `${activeGroup.name} (${zones.length})` : `Zones (${zones.length})`}
           </span>
         </div>
         <div className="py-1">
@@ -370,18 +375,40 @@ export function DNSView({
             <h2 className="text-base font-semibold font-display text-text-primary">
               {currentZone?.name ?? "Select a zone"}
             </h2>
-            {currentZone && (
-              <div className="flex items-center gap-1.5 mt-1">
-                <div
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    currentZone.status === "active" ? "bg-emerald-500" : "bg-yellow-500"
-                  }`}
-                />
-                <span className="text-xs font-display text-text-muted capitalize">
-                  {currentZone.status}
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {currentZone && (
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      currentZone.status === "active" ? "bg-emerald-500" : "bg-yellow-500"
+                    }`}
+                  />
+                  <span className="text-xs font-display text-text-muted capitalize">
+                    {currentZone.status}
+                  </span>
+                </div>
+              )}
+              {activeGroup && (
+                <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-full text-[11px] font-display bg-accent/10 border border-accent/20 text-accent">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: activeGroup.color }}
+                  />
+                  <span>Filtered: {activeGroup.name}</span>
+                  <button
+                    type="button"
+                    onClick={onClearGroupFilter}
+                    className="ml-0.5 w-4 h-4 rounded-full flex items-center justify-center text-accent/70 hover:text-text-primary hover:bg-accent/20 transition-colors"
+                    aria-label="Clear group filter"
+                    title="Clear group filter"
+                  >
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+                      <path d="M1.146 1.146a.5.5 0 0 1 .708 0L4 3.293l2.146-2.147a.5.5 0 1 1 .708.708L4.707 4l2.147 2.146a.5.5 0 0 1-.708.708L4 4.707 1.854 6.854a.5.5 0 0 1-.708-.708L3.293 4 1.146 1.854a.5.5 0 0 1 0-.708z" />
+                    </svg>
+                  </button>
                 </span>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Batch Mode Toggle */}
