@@ -20,8 +20,10 @@ export default defineConfig({
         "src/shared/**/*.ts",
       ],
       exclude: [
-        "src/server/docker-entry.ts",
         "src/server/types/**",
+        "tests/**",
+        "**/*.test.ts",
+        "**/*.spec.ts",
       ],
     },
   },

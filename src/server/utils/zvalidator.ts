@@ -35,3 +35,20 @@ export function zValidatorParam<T>(schema: ZodSchema<T>) {
     return result.data;
   });
 }
+
+/**
+ * Validates query-string data against a Zod schema.
+ * Throws a 400 HTTPException if validation fails.
+ */
+export function zValidatorQuery<T>(schema: ZodSchema<T>) {
+  return validator("query", (value, c) => {
+    const result = schema.safeParse(value);
+    if (!result.success) {
+      const message = result.error.issues
+        .map((e) => `${e.path.join(".")}: ${e.message}`)
+        .join("; ");
+      throw new HTTPException(400, { message: `Invalid query parameters: ${message}` });
+    }
+    return result.data;
+  });
+}

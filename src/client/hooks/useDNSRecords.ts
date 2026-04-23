@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useOptimistic, startTransition } from "react";
 import { api } from "../lib/api";
 import type { DNSRecord, CreateDNSInput, UpdateDNSInput } from "../types";
 
@@ -18,8 +18,66 @@ export interface UseDNSRecordsReturn {
   refresh: () => Promise<void>;
 }
 
+type OptimisticAction =
+  | { kind: "add"; record: DNSRecord }
+  | { kind: "update"; recordId: string; patch: UpdateDNSInput }
+  | { kind: "delete"; recordId: string };
+
+function optimisticReducer(
+  state: DNSRecord[],
+  action: OptimisticAction
+): DNSRecord[] {
+  switch (action.kind) {
+    case "add":
+      return [...state, action.record];
+    case "update":
+      return state.map((r) =>
+        r.id === action.recordId ? { ...r, ...action.patch } : r
+      );
+    case "delete":
+      return state.filter((r) => r.id !== action.recordId);
+  }
+}
+
+function buildOptimisticRecord(
+  zoneId: string,
+  input: CreateDNSInput
+): DNSRecord {
+  const uniq = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  return {
+    id: `optimistic-${uniq}`,
+    zoneId,
+    zoneName: "",
+    type: input.type,
+    name: input.name,
+    content: input.content,
+    proxied: input.proxied ?? false,
+    proxiable: true,
+    ttl: input.ttl ?? 1,
+    priority: input.priority,
+  };
+}
+
+function runAsAction<T>(
+  action: (resolve: (value: T) => void, reject: (err: unknown) => void) => Promise<void>
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    startTransition(async () => {
+      try {
+        await action(resolve, reject);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}
+
 export function useDNSRecords(): UseDNSRecordsReturn {
   const [records, setRecords] = useState<DNSRecord[]>([]);
+  const [optimisticRecords, applyOptimistic] = useOptimistic(
+    records,
+    optimisticReducer
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentZoneId, setCurrentZoneId] = useState<string | null>(null);
@@ -46,59 +104,58 @@ export function useDNSRecords(): UseDNSRecordsReturn {
   }, [currentZoneId, fetchRecords]);
 
   const createRecord = useCallback(
-    async (zoneId: string, input: CreateDNSInput): Promise<DNSRecord> => {
-      const created = await api.dns.create(zoneId, input);
-      setRecords((prev) => [...prev, created]);
-      return created;
-    },
-    []
+    (zoneId: string, input: CreateDNSInput): Promise<DNSRecord> =>
+      runAsAction<DNSRecord>(async (resolve, reject) => {
+        applyOptimistic({ kind: "add", record: buildOptimisticRecord(zoneId, input) });
+        try {
+          const created = await api.dns.create(zoneId, input);
+          setRecords((prev) => [...prev, created]);
+          resolve(created);
+        } catch (err) {
+          reject(err);
+        }
+      }),
+    [applyOptimistic]
   );
 
   const updateRecord = useCallback(
-    async (
+    (
       zoneId: string,
       recordId: string,
       input: UpdateDNSInput
-    ): Promise<DNSRecord> => {
-      // Optimistic update
-      setRecords((prev) =>
-        prev.map((r) =>
-          r.id === recordId ? { ...r, ...input } : r
-        )
-      );
-
-      try {
-        const updated = await api.dns.update(zoneId, recordId, input);
-        setRecords((prev) =>
-          prev.map((r) => (r.id === recordId ? updated : r))
-        );
-        return updated;
-      } catch (err) {
-        // Refetch to restore state
-        await fetchRecords(zoneId);
-        throw err;
-      }
-    },
-    [fetchRecords]
+    ): Promise<DNSRecord> =>
+      runAsAction<DNSRecord>(async (resolve, reject) => {
+        applyOptimistic({ kind: "update", recordId, patch: input });
+        try {
+          const updated = await api.dns.update(zoneId, recordId, input);
+          setRecords((prev) =>
+            prev.map((r) => (r.id === recordId ? updated : r))
+          );
+          resolve(updated);
+        } catch (err) {
+          reject(err);
+        }
+      }),
+    [applyOptimistic]
   );
 
   const deleteRecord = useCallback(
-    async (zoneId: string, recordId: string): Promise<void> => {
-      const prevRecords = [...records];
-      setRecords((prev) => prev.filter((r) => r.id !== recordId));
-
-      try {
-        await api.dns.delete(zoneId, recordId);
-      } catch (err) {
-        setRecords(prevRecords);
-        throw err;
-      }
-    },
-    [records]
+    (zoneId: string, recordId: string): Promise<void> =>
+      runAsAction<void>(async (resolve, reject) => {
+        applyOptimistic({ kind: "delete", recordId });
+        try {
+          await api.dns.delete(zoneId, recordId);
+          setRecords((prev) => prev.filter((r) => r.id !== recordId));
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      }),
+    [applyOptimistic]
   );
 
   return {
-    records,
+    records: optimisticRecords,
     loading,
     error,
     currentZoneId,

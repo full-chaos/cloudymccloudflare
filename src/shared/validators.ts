@@ -125,6 +125,16 @@ export const customRuleSchema = z.object({
 
 export type CustomRuleInput = z.infer<typeof customRuleSchema>;
 
+// ─── Replace WAF Rules Schema ─────────────────────────────────────────────────
+
+// Used by PUT /api/security/:zoneId/rules — replaces the entire custom WAF
+// ruleset for a zone. An empty `rules` array is allowed and clears the ruleset.
+export const replaceWAFRulesSchema = z.object({
+  rules: z.array(customRuleSchema),
+});
+
+export type ReplaceWAFRulesInput = z.infer<typeof replaceWAFRulesSchema>;
+
 // ─── Deploy Rules Schema ──────────────────────────────────────────────────────
 
 export const deployTargetSchema = z.object({

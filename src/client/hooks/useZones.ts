@@ -1,17 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { api } from "../lib/api";
-import { ZONES } from "@shared/constants";
 import type { Zone } from "../types";
-
-// Convert static zone data to Zone type for fallback
-const STATIC_ZONES: Zone[] = ZONES.map((z) => ({
-  id: z.id,
-  name: z.name,
-  status: "active" as const,
-  paused: false,
-  plan: { id: "free", name: "Free", price: 0 },
-  nameServers: [],
-}));
 
 export interface UseZonesReturn {
   zones: Zone[];
@@ -26,7 +15,7 @@ export interface UseZonesReturn {
 }
 
 export function useZones(): UseZonesReturn {
-  const [zones, setZones] = useState<Zone[]>(STATIC_ZONES);
+  const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -36,11 +25,10 @@ export function useZones(): UseZonesReturn {
       setLoading(true);
       setError(null);
       const data = await api.zones.list();
-      if (data.length > 0) {
-        setZones(data);
-      }
-    } catch {
-      // Fall back to static zones (already set as initial state)
+      setZones(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load zones");
+      setZones([]);
     } finally {
       setLoading(false);
     }
