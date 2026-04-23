@@ -25,6 +25,13 @@
   "vars": {
     "ENVIRONMENT": "production",
     "CF_ACCOUNT_ID": "f39dbcd4130fd731be7f0f77bf013e01",
+    // Cloudflare Access sits in front of this Worker. When a request arrives
+    // the middleware verifies `Cf-Access-Jwt-Assertion` against our team's
+    // JWKS (fetched from TEAM_DOMAIN/cdn-cgi/access/certs) and checks that
+    // the token's `aud` claim matches POLICY_AUD for this specific app.
+    // Both values are public identifiers, safe to commit.
+    "TEAM_DOMAIN": "https://mightytrashpanda.cloudflareaccess.com",
+    "POLICY_AUD": "9e4fe862d4c870aa453b81baf0b969c2114ca298d39a8117f2d54c2d52551f8b",
   },
   // Analytics backfill: fetch fresh per-zone hourly buckets every 15 minutes.
   // Runs src/server/index.ts `scheduled` export → runAnalyticsBackfill().
