@@ -72,11 +72,15 @@ export type RuleAction =
   | "log";
 
 export interface RuleTemplate {
+  id?: string;
   name: string;
   description: string;
   expression: string;
   action: RuleAction;
   category?: string;
+  isBuiltIn?: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface CustomRule {
@@ -89,10 +93,9 @@ export interface CustomRule {
 
 // ─── Deployment ───────────────────────────────────────────────────────────────
 
-export interface DeployTarget {
-  type: "zones" | "group";
-  ids: string[];
-}
+export type DeployTarget =
+  | { type: "zones"; ids: string[] }
+  | { type: "group"; id: string };
 
 export interface DeployPayload {
   target: DeployTarget;
@@ -111,6 +114,20 @@ export interface DeploymentLogEntry {
   status: "success" | "failed" | "pending";
   errorMessage?: string;
   createdAt: string;
+}
+
+export interface DeployResult {
+  zoneId: string;
+  zoneName: string;
+  status: "success" | "failed";
+  errorMessage?: string;
+  logEntries: DeploymentLogEntry[];
+}
+
+export interface ZoneBatchResult<T = unknown> {
+  zoneId: string;
+  result?: T;
+  error?: string;
 }
 
 // ─── Zone Settings ────────────────────────────────────────────────────────────

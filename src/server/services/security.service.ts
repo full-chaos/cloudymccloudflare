@@ -1,4 +1,4 @@
-import { eq, desc } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 import { nanoid } from "../utils/nanoid";
 import type { CloudflareClient } from "./cloudflare";
 import type { Database } from "../db";
@@ -18,13 +18,6 @@ export async function getWAFRules(
 
 // ─── Deploy Rules ─────────────────────────────────────────────────────────────
 
-export interface DeployResult {
-  zoneId: string;
-  zoneName: string;
-  status: "success" | "failed";
-  errorMessage?: string;
-}
-
 type NormalizedRule = {
   id?: string;
   expression: string;
@@ -40,20 +33,8 @@ export async function deployRules(
   rules: NormalizedRule[],
   mode: DeployRulesInput["mode"],
   zoneNameMap: Record<string, string> = {}
-): Promise<DeployResult[]> {
-  const { type, ids } = target;
-
-  // Resolve zone IDs from target
-  let zoneIds: string[] = [];
-
-  if (type === "zones") {
-    zoneIds = ids;
-  } else if (type === "group") {
-    // Caller is responsible for resolving group -> zoneIds
-    // ids[0] is the group ID; the actual zone IDs are passed as zoneIds already resolved
-    // When called from routes, zoneIds will already be resolved from the group
-    zoneIds = ids;
-  }
+): Promise<DeploymentLogEntry[]> {
+  const zoneIds = target.type === "zones" ? target.ids : [target.id];
 
   // Convert our rule format to CF rule format
   const cfRules: CFRule[] = rules.map((r) => ({
@@ -76,16 +57,18 @@ export async function deployRules(
   });
 
   // Write deployment log entries
-  const deployResults: DeployResult[] = [];
+  const logEntries: DeploymentLogEntry[] = [];
 
-  for (const { zoneId, result, error } of results) {
+  for (const { zoneId, error } of results) {
     const zoneName = zoneNameMap[zoneId] ?? zoneId;
     const status = error ? "failed" : "success";
 
     // Log each rule separately for auditability
     for (const rule of rules) {
+      const id = nanoid();
+      const createdAt = new Date().toISOString();
       await db.insert(deploymentLog).values({
-        id: nanoid(),
+        id,
         zoneId,
         zoneName,
         ruleType: "custom_waf",
@@ -94,18 +77,25 @@ export async function deployRules(
         details: JSON.stringify({ mode, expression: rule.expression }),
         status,
         errorMessage: error ?? null,
+        createdAt,
+      });
+
+      logEntries.push({
+        id,
+        zoneId,
+        zoneName,
+        ruleType: "custom_waf",
+        ruleName: rule.description,
+        action: rule.action,
+        details: JSON.stringify({ mode, expression: rule.expression }),
+        status,
+        errorMessage: error,
+        createdAt,
       });
     }
-
-    deployResults.push({
-      zoneId,
-      zoneName,
-      status,
-      errorMessage: error,
-    });
   }
 
-  return deployResults;
+  return logEntries;
 }
 
 // ─── Deployment Log ───────────────────────────────────────────────────────────
