@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import type { Bindings } from "../types/env";
 import { CloudflareClient } from "../services/cloudflare";
 import { createDb, zoneCache } from "../db";
@@ -150,27 +150,35 @@ async function syncZoneCache(
     await db.delete(zoneCache).where(inArray(zoneCache.id, staleZoneIds));
   }
 
-  for (const zone of cfZones) {
-    const payload = {
-      name: zone.name,
-      status: zone.status,
-      paused: zone.paused,
-      planName: zone.plan?.name ?? "",
-      planPrice: zone.plan?.price ?? 0,
-      nameServers: JSON.stringify(zone.name_servers ?? []),
-      accountId: zone.account?.id ?? "",
-      rawJson: JSON.stringify(zone),
-      syncedAt: now,
-    };
-
-    if (cachedZoneIds.includes(zone.id)) {
-      await db.update(zoneCache).set(payload).where(eq(zoneCache.id, zone.id));
-    } else {
-      await db.insert(zoneCache).values({
+  if (cfZones.length > 0) {
+    await db
+      .insert(zoneCache)
+      .values(cfZones.map((zone) => ({
         id: zone.id,
-        ...payload,
+        name: zone.name,
+        status: zone.status,
+        paused: zone.paused,
+        planName: zone.plan?.name ?? "",
+        planPrice: zone.plan?.price ?? 0,
+        nameServers: JSON.stringify(zone.name_servers ?? []),
+        accountId: zone.account?.id ?? "",
+        rawJson: JSON.stringify(zone),
+        syncedAt: now,
+      })))
+      .onConflictDoUpdate({
+        target: zoneCache.id,
+        set: {
+          name: sql`excluded.name`,
+          status: sql`excluded.status`,
+          paused: sql`excluded.paused`,
+          planName: sql`excluded.plan_name`,
+          planPrice: sql`excluded.plan_price`,
+          nameServers: sql`excluded.name_servers`,
+          accountId: sql`excluded.account_id`,
+          rawJson: sql`excluded.raw_json`,
+          syncedAt: sql`excluded.synced_at`,
+        },
       });
-    }
   }
 
   return now;

@@ -31,6 +31,7 @@ function env(overrides: Partial<Bindings> = {}): Bindings {
   return {
     APP_SECRET: "",
     ENVIRONMENT: "development",
+    ENABLE_DEV_AUTH_BYPASS: "true",
     CF_API_TOKEN: "",
     CF_ACCOUNT_ID: "",
     TEAM_DOMAIN: "",
@@ -63,24 +64,34 @@ describe("authMiddleware", () => {
     expect(res.status).toBe(200);
   });
 
-  it("bypasses auth for localhost even when ENVIRONMENT is production", async () => {
+  it("blocks localhost when ENVIRONMENT is production", async () => {
     const app = createApp();
     const res = await app.request(
       req("/api/zones"),
       {},
       env({ APP_SECRET: "secret123", ENVIRONMENT: "production" })
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(401);
   });
 
-  it("bypasses auth for private-network hosts even when ENVIRONMENT is production", async () => {
+  it("blocks private-network hosts when ENVIRONMENT is production", async () => {
     const app = createApp();
     const res = await app.request(
       req("/api/zones", undefined, "http://192.168.4.82:5173"),
       {},
       env({ APP_SECRET: "secret123", ENVIRONMENT: "production" })
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(401);
+  });
+
+  it("blocks localhost in development when explicit bypass flag is disabled", async () => {
+    const app = createApp();
+    const res = await app.request(
+      req("/api/zones"),
+      {},
+      env({ APP_SECRET: "secret123", ENABLE_DEV_AUTH_BYPASS: "false" })
+    );
+    expect(res.status).toBe(401);
   });
 
   it("blocks non-local /api/zones without auth header when secret is set", async () => {

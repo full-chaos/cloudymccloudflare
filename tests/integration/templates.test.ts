@@ -9,6 +9,7 @@ function makeEnv() {
     CF_ACCOUNT_ID: "acct-123",
     APP_SECRET: "your_app_secret_here", // bypasses auth
     ENVIRONMENT: "test",
+    ENABLE_DEV_AUTH_BYPASS: "true",
   };
 }
 

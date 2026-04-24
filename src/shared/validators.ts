@@ -137,10 +137,16 @@ export type ReplaceWAFRulesInput = z.infer<typeof replaceWAFRulesSchema>;
 
 // ─── Deploy Rules Schema ──────────────────────────────────────────────────────
 
-export const deployTargetSchema = z.object({
-  type: z.enum(["zones", "group"]),
-  ids: z.array(z.string().min(1)).min(1, "At least one ID is required"),
-});
+export const deployTargetSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("zones"),
+    ids: z.array(z.string().min(1)).min(1, "At least one zone ID is required"),
+  }),
+  z.object({
+    type: z.literal("group"),
+    id: z.string().min(1, "Group ID is required"),
+  }),
+]);
 
 export const deployRulesSchema = z.object({
   target: deployTargetSchema,
@@ -205,3 +211,17 @@ export const analyticsQuerySchema = z.object({
 });
 
 export type AnalyticsQueryInput = z.infer<typeof analyticsQuerySchema>;
+
+// ─── Route Param / Query Schemas ──────────────────────────────────────────────
+
+const nonEmptyId = z.string().min(1);
+
+export const zoneParamSchema = z.object({ zoneId: nonEmptyId });
+export const groupParamSchema = z.object({ groupId: nonEmptyId });
+export const dnsRecordParamSchema = z.object({ zoneId: nonEmptyId, recordId: nonEmptyId });
+export const wafRuleParamSchema = z.object({ zoneId: nonEmptyId, ruleId: nonEmptyId });
+export const templateParamSchema = z.object({ id: nonEmptyId });
+
+export const deploymentLogQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).optional().default(100),
+});

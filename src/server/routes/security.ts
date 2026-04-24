@@ -5,54 +5,57 @@ import type { Bindings } from "../types/env";
 import { CloudflareClient } from "../services/cloudflare";
 import { createDb, groupZones, zoneCache } from "../db";
 import {
-  customRuleSchema,
   deployRulesSchema,
   createIPAccessRuleSchema,
   replaceWAFRulesSchema,
+  deploymentLogQuerySchema,
+  wafRuleParamSchema,
+  zoneParamSchema,
 } from "@shared/validators";
 import {
   getWAFRules,
   deployRules,
   getDeploymentLog,
 } from "../services/security.service";
-import { zValidator } from "../utils/zvalidator";
+import { zValidator, zValidatorParam, zValidatorQuery } from "../utils/zvalidator";
 import type { CFRule } from "../types/cloudflare";
 
 const security = new Hono<{ Bindings: Bindings }>();
 
 // GET /api/security/:zoneId/rules - get WAF rules for a zone
-security.get("/:zoneId/rules", async (c) => {
-  const { zoneId } = c.req.param();
+security.get("/:zoneId/rules", zValidatorParam(zoneParamSchema), async (c) => {
+  const { zoneId } = c.req.valid("param");
   const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
 
   const ruleset = await getWAFRules(cf, zoneId);
 
-  return c.json({ success: true, result: ruleset });
+  return c.json({ success: true, result: ruleset.rules });
 });
 
-// POST /api/security/:zoneId/rules - add a single rule to zone
-security.post("/:zoneId/rules", zValidator(customRuleSchema), async (c) => {
-  const { zoneId } = c.req.param();
-  const rule = c.req.valid("json");
+// POST /api/security/:zoneId/rules - append one or more rules to zone
+security.post("/:zoneId/rules", zValidatorParam(zoneParamSchema), zValidator(replaceWAFRulesSchema), async (c) => {
+  const { zoneId } = c.req.valid("param");
+  const { rules } = c.req.valid("json");
   const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
 
   // Get existing ruleset and append
   const existing = await cf.getCustomWAFRules(zoneId);
-  const newRule: CFRule = {
+  const newRules: CFRule[] = rules.map((rule) => ({
+    id: rule.id,
     action: rule.action,
     expression: rule.expression,
     description: rule.description,
     enabled: rule.enabled ?? true,
-  };
+  }));
 
-  const updated = await cf.setCustomWAFRules(zoneId, [...existing.rules, newRule]);
+  const updated = await cf.setCustomWAFRules(zoneId, [...existing.rules, ...newRules]);
 
-  return c.json({ success: true, result: updated }, 201);
+  return c.json({ success: true, result: updated.rules }, 201);
 });
 
 // PUT /api/security/:zoneId/rules - replace all rules for a zone
-security.put("/:zoneId/rules", zValidator(replaceWAFRulesSchema), async (c) => {
-  const { zoneId } = c.req.param();
+security.put("/:zoneId/rules", zValidatorParam(zoneParamSchema), zValidator(replaceWAFRulesSchema), async (c) => {
+  const { zoneId } = c.req.valid("param");
   const { rules } = c.req.valid("json");
   const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
 
@@ -66,12 +69,12 @@ security.put("/:zoneId/rules", zValidator(replaceWAFRulesSchema), async (c) => {
 
   const updated = await cf.setCustomWAFRules(zoneId, cfRules);
 
-  return c.json({ success: true, result: updated });
+  return c.json({ success: true, result: updated.rules });
 });
 
 // DELETE /api/security/:zoneId/rules/:ruleId - delete a specific rule
-security.delete("/:zoneId/rules/:ruleId", async (c) => {
-  const { zoneId, ruleId } = c.req.param();
+security.delete("/:zoneId/rules/:ruleId", zValidatorParam(wafRuleParamSchema), async (c) => {
+  const { zoneId, ruleId } = c.req.valid("param");
   const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
 
   const existing = await cf.getCustomWAFRules(zoneId);
@@ -81,16 +84,13 @@ security.delete("/:zoneId/rules/:ruleId", async (c) => {
     throw new HTTPException(404, { message: `Rule ${ruleId} not found` });
   }
 
-  const updated = await cf.setCustomWAFRules(zoneId, filtered);
+  await cf.setCustomWAFRules(zoneId, filtered);
 
-  return c.json({ success: true, result: updated });
+  return c.json({ success: true, result: { deleted: true } });
 });
 
 // POST /api/security/deploy - deploy rules to target zones/group
 security.post("/deploy", zValidator(deployRulesSchema), async (c) => {
-  // TODO: Align this response contract with the client log model. The UI
-  // currently expects per-rule deployment log entries, but this route returns
-  // per-zone deploy results.
   const { target, rules, mode } = c.req.valid("json");
   const db = createDb(c.env.DB);
   const cf = new CloudflareClient(c.env.CF_API_TOKEN, c.env.CF_ACCOUNT_ID);
@@ -110,7 +110,7 @@ security.post("/deploy", zValidator(deployRulesSchema), async (c) => {
       zoneNameMap[zone.id] = zone.name;
     }
   } else if (target.type === "group") {
-    const groupId = target.ids[0];
+    const groupId = target.id;
 
     const zoneRows = await db
       .select({ zoneId: groupZones.zoneId, zoneName: groupZones.zoneName })
@@ -152,10 +152,9 @@ security.post("/deploy", zValidator(deployRulesSchema), async (c) => {
 });
 
 // GET /api/security/deployments - deployment log
-security.get("/deployments", async (c) => {
+security.get("/deployments", zValidatorQuery(deploymentLogQuerySchema), async (c) => {
   const db = createDb(c.env.DB);
-  const limitParam = c.req.query("limit");
-  const limit = limitParam ? Math.min(parseInt(limitParam, 10), 500) : 100;
+  const { limit } = c.req.valid("query");
 
   const result = await getDeploymentLog(db, limit);
 

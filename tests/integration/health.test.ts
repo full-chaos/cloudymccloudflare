@@ -8,6 +8,7 @@ describe("GET /api/health", () => {
     const res = await app.request("/api/health", {}, {
       ENVIRONMENT: "test",
       APP_SECRET: "test-secret",
+      ENABLE_DEV_AUTH_BYPASS: "true",
     });
 
     expect(res.status).toBe(200);
@@ -36,6 +37,7 @@ describe("GET /api/health", () => {
       {
         ENVIRONMENT: "production",
         APP_SECRET: "real-secret",
+        ENABLE_DEV_AUTH_BYPASS: "true",
       }
     );
 

@@ -7,7 +7,6 @@ import { createTemplateSchema, updateTemplateSchema } from "@shared/validators";
 import { RULE_TEMPLATES } from "@shared/constants";
 import { zValidator } from "../utils/zvalidator";
 import { nanoid } from "../utils/nanoid";
-import type { RuleTemplate } from "@shared/types";
 
 const templates = new Hono<{ Bindings: Bindings }>();
 

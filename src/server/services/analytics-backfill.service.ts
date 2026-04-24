@@ -1,7 +1,7 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, lt, sql } from "drizzle-orm";
 import type { Bindings } from "../types/env";
 import { createDb } from "../db";
-import { analyticsZoneHourly, analyticsSyncLog } from "../db/schema";
+import { analyticsZoneHourly, analyticsSyncLog, analyticsLocks } from "../db/schema";
 import { CloudflareClient } from "./cloudflare";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
@@ -31,6 +31,8 @@ const OVERLAP_HOURS = 2;
  * rows keeps us at 98 params, comfortably under.
  */
 const UPSERT_CHUNK_SIZE = 14;
+const BACKFILL_LOCK_NAME = "analytics-backfill";
+const BACKFILL_LOCK_TTL_MS = 14 * 60 * 1000;
 
 // ─── GraphQL query ────────────────────────────────────────────────────────────
 
@@ -92,13 +94,26 @@ export async function runAnalyticsBackfill(env: Bindings): Promise<BackfillResul
   const db = createDb(env.DB);
   const cf = new CloudflareClient(env.CF_API_TOKEN, env.CF_ACCOUNT_ID);
   const startedAt = new Date().toISOString();
+  const ownerId = `worker-${crypto.randomUUID()}`;
 
   try {
+    const lock = await acquireBackfillLock(db, ownerId);
+    if (!lock.acquired) {
+      await logRun(db, startedAt, 0, "partial", "Analytics backfill already running");
+      return {
+        rowsUpserted: 0,
+        zonesQueried: 0,
+        windowStart: startedAt,
+        windowEnd: startedAt,
+      };
+    }
+
     const { since, until } = await computeWindow(db);
     const zones = await cf.listZones();
     const zoneTags = zones.map((z) => z.id);
 
     if (zoneTags.length === 0) {
+      await releaseBackfillLock(db, ownerId);
       await logRun(db, startedAt, 0, "success", null);
       return { rowsUpserted: 0, zonesQueried: 0, windowStart: since, windowEnd: until };
     }
@@ -152,6 +167,7 @@ export async function runAnalyticsBackfill(env: Bindings): Promise<BackfillResul
       }
     }
 
+    await releaseBackfillLock(db, ownerId);
     await logRun(db, startedAt, rows.length, "success", null);
     return {
       rowsUpserted: rows.length,
@@ -161,9 +177,49 @@ export async function runAnalyticsBackfill(env: Bindings): Promise<BackfillResul
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    await releaseBackfillLock(db, ownerId).catch(() => undefined);
     await logRun(db, startedAt, 0, "error", msg);
     throw err;
   }
+}
+
+async function acquireBackfillLock(
+  db: ReturnType<typeof createDb>,
+  ownerId: string,
+): Promise<{ acquired: boolean }> {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + BACKFILL_LOCK_TTL_MS).toISOString();
+  const nowIso = now.toISOString();
+
+  const rows = await db
+    .insert(analyticsLocks)
+    .values({
+      name: BACKFILL_LOCK_NAME,
+      ownerId,
+      expiresAt,
+      updatedAt: nowIso,
+    })
+    .onConflictDoUpdate({
+      target: analyticsLocks.name,
+      set: {
+        ownerId,
+        expiresAt,
+        updatedAt: nowIso,
+      },
+      where: lt(analyticsLocks.expiresAt, nowIso),
+    })
+    .returning({ name: analyticsLocks.name });
+
+  return { acquired: rows.length > 0 };
+}
+
+async function releaseBackfillLock(
+  db: ReturnType<typeof createDb>,
+  ownerId: string,
+): Promise<void> {
+  await db
+    .delete(analyticsLocks)
+    .where(and(eq(analyticsLocks.name, BACKFILL_LOCK_NAME), eq(analyticsLocks.ownerId, ownerId)));
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
