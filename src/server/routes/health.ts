@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Bindings } from "../types/env";
-import { isLocalDevHost } from "../middleware/auth";
+import { isLocalAuthBypassActive } from "../middleware/auth";
 
 const health = new Hono<{ Bindings: Bindings }>();
 
@@ -13,7 +13,7 @@ health.get("/", (c) => {
       version: "1.0.0",
       environment: c.env.ENVIRONMENT,
       auth: {
-        localBypassActive: isLocalDevHost(requestUrl.hostname),
+        localBypassActive: isLocalAuthBypassActive(c.env, requestUrl.hostname),
         requestHost: requestUrl.host,
       },
     },

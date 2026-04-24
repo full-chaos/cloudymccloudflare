@@ -3,6 +3,7 @@ import { logger } from "hono/logger";
 import type { Bindings } from "./types/env";
 import { authMiddleware } from "./middleware/auth";
 import { errorHandler } from "./middleware/errorHandler";
+import { rateLimit } from "./middleware/rateLimit";
 import { runAnalyticsBackfill } from "./services/analytics-backfill.service";
 import health from "./routes/health";
 import zones from "./routes/zones";
@@ -32,6 +33,18 @@ app.use("*", async (c, next) => {
 
 // Auth middleware applied to all /api/* routes
 app.use("/api/*", authMiddleware);
+
+const expensiveMutationLimit = rateLimit({
+  name: "expensive-api-mutation",
+  limit: 10,
+  windowMs: 60_000,
+});
+
+app.use("/api/analytics/refresh", expensiveMutationLimit);
+app.use("/api/zones/sync", expensiveMutationLimit);
+app.use("/api/dns/batch", expensiveMutationLimit);
+app.use("/api/dns/batch-by-group", expensiveMutationLimit);
+app.use("/api/security/deploy", expensiveMutationLimit);
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 

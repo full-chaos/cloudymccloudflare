@@ -18,6 +18,7 @@ function toErrorStatus(
 
 export const errorHandler: ErrorHandler<{ Bindings: Bindings }> = (err, c) => {
   console.error("[ErrorHandler]", err.message, err.stack);
+  const isProduction = c.env?.ENVIRONMENT === "production";
 
   if (err instanceof CloudflareApiError) {
     return c.json(
@@ -26,7 +27,7 @@ export const errorHandler: ErrorHandler<{ Bindings: Bindings }> = (err, c) => {
         errors: [
           {
             code: err.code,
-            message: `Cloudflare API error: ${err.message}`,
+            message: isProduction ? "Cloudflare API request failed" : `Cloudflare API error: ${err.message}`,
           },
         ],
       },
@@ -49,7 +50,12 @@ export const errorHandler: ErrorHandler<{ Bindings: Bindings }> = (err, c) => {
   return c.json(
     {
       success: false,
-      errors: [{ code: 500, message: err.message || "An unexpected error occurred" }],
+      errors: [
+        {
+          code: 500,
+          message: isProduction ? "Internal Server Error" : err.message || "An unexpected error occurred",
+        },
+      ],
     },
     500,
   );

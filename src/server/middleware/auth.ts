@@ -4,6 +4,10 @@ import { verifyCfAccessJwt } from "./cf-access";
 
 const PLACEHOLDER_SECRET = "your_app_secret_here";
 
+function isDevAuthBypassEnabled(env: Bindings): boolean {
+  return env.ENVIRONMENT !== "production" && env.ENABLE_DEV_AUTH_BYPASS === "true";
+}
+
 function isPrivateIpv4Host(hostname: string): boolean {
   if (hostname.startsWith("10.")) return true;
   if (hostname.startsWith("192.168.")) return true;
@@ -25,6 +29,24 @@ export function isLocalDevHost(hostname: string): boolean {
   );
 }
 
+export function isLocalAuthBypassActive(env: Bindings, hostname: string): boolean {
+  return isDevAuthBypassEnabled(env) && isLocalDevHost(hostname);
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  const left = encoder.encode(a);
+  const right = encoder.encode(b);
+  const maxLength = Math.max(left.length, right.length);
+  let diff = left.length ^ right.length;
+
+  for (let i = 0; i < maxLength; i++) {
+    diff |= (left[i] ?? 0) ^ (right[i] ?? 0);
+  }
+
+  return diff === 0;
+}
+
 export const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
   const requestUrl = new URL(c.req.url);
   const path = requestUrl.pathname;
@@ -32,9 +54,9 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (
     return next();
   }
 
-  // Local dev browser traffic never injects Authorization headers, so bypass
-  // auth for loopback/private-network hosts even if ENVIRONMENT is mis-set.
-  if (isLocalDevHost(requestUrl.hostname)) {
+  // Local dev browser traffic never injects Authorization headers. This bypass
+  // is explicit and non-production-only; hostname alone is not trusted.
+  if (isLocalAuthBypassActive(c.env, requestUrl.hostname)) {
     return next();
   }
 
@@ -43,8 +65,8 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (
   const cfAccessConfigured = Boolean(TEAM_DOMAIN) && Boolean(POLICY_AUD);
   const secretConfigured = Boolean(APP_SECRET) && APP_SECRET !== PLACEHOLDER_SECRET;
 
-  // Local/dev bypass: outside production AND no auth mechanism configured.
-  if (!isProduction && !cfAccessConfigured && !secretConfigured) {
+  // Explicit local/dev bypass: outside production AND no auth mechanism configured.
+  if (!isProduction && !cfAccessConfigured && !secretConfigured && isDevAuthBypassEnabled(c.env)) {
     return next();
   }
 
@@ -76,7 +98,7 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (
   // via a service token or hit the Worker directly.
   if (secretConfigured) {
     const authHeader = c.req.header("Authorization");
-    if (authHeader?.startsWith("Bearer ") && authHeader.slice(7) === APP_SECRET) {
+    if (authHeader?.startsWith("Bearer ") && timingSafeEqual(authHeader.slice(7), APP_SECRET)) {
       return next();
     }
   }

@@ -46,6 +46,18 @@ describe("errorHandler", () => {
     expect(body.success).toBe(false);
   });
 
+  it("masks generic errors in production", async () => {
+    const app = createApp();
+    app.get("/test", () => {
+      throw new Error("database password leaked");
+    });
+
+    const res = await app.request("/test", {}, { ENVIRONMENT: "production" } as Bindings);
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.errors[0].message).toBe("Internal Server Error");
+  });
+
   it("handles CloudflareApiError with out-of-range status as 502", async () => {
     const app = createApp();
     app.get("/test", () => {

@@ -6,6 +6,7 @@ describe("404 handler", () => {
     const res = await app.request("/api/nonexistent", {}, {
       ENVIRONMENT: "test",
       APP_SECRET: "your_app_secret_here",
+      ENABLE_DEV_AUTH_BYPASS: "true",
     });
 
     expect(res.status).toBe(404);
@@ -21,6 +22,7 @@ describe("404 handler", () => {
     }, {
       ENVIRONMENT: "test",
       APP_SECRET: "your_app_secret_here",
+      ENABLE_DEV_AUTH_BYPASS: "true",
     });
 
     expect(res.status).toBe(404);
