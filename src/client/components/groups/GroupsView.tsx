@@ -10,6 +10,7 @@ interface GroupsViewProps {
   groups: Group[];
   zones: Zone[];
   loading: boolean;
+  error?: string | null;
   onCreateGroup: (name: string, color: string) => Promise<Group>;
   onDeleteGroup: (groupId: string) => Promise<void>;
   onAddZone: (groupId: string, zoneId: string, zoneName: string) => Promise<void>;
@@ -28,6 +29,7 @@ export function GroupsView({
   groups,
   zones,
   loading,
+  error,
   onCreateGroup,
   onDeleteGroup,
   onAddZone,
@@ -100,6 +102,11 @@ export function GroupsView({
       <div className="flex items-start gap-6">
         {/* Left: create form + group grid */}
         <div className="flex-1 min-w-0 space-y-5">
+          {error && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+              <p className="text-sm font-display text-red-200">{error}</p>
+            </div>
+          )}
           {/* Create Group Form */}
           <div className="bg-bg-secondary border border-border rounded-[10px] p-5">
             <h2 className="text-sm font-semibold font-display text-text-primary mb-4">
@@ -165,9 +172,11 @@ export function GroupsView({
                 const isSelected = selectedGroupId === group.id;
                 return (
                   <div
+                    role="button"
+                    tabIndex={0}
                     key={group.id}
                     className={`
-                      bg-bg-secondary border rounded-[10px] p-4 cursor-pointer
+                      w-full text-left bg-bg-secondary border rounded-[10px] p-4 cursor-pointer
                       transition-all duration-150
                       ${
                         isSelected
@@ -178,6 +187,13 @@ export function GroupsView({
                     onClick={() =>
                       setSelectedGroupId(isSelected ? null : group.id)
                     }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedGroupId(isSelected ? null : group.id);
+                      }
+                    }}
+                    aria-pressed={isSelected}
                   >
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <div className="flex items-center gap-2.5 min-w-0">

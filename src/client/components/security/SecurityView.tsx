@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Zone, Group, CustomRule, RuleAction } from "../../types";
 import type { DeployLogEntry, ToastType } from "../../types";
 import { RULE_TEMPLATES } from "../../../shared/constants";
@@ -12,6 +12,8 @@ interface SecurityViewProps {
   groups: Group[];
   deployLog: DeployLogEntry[];
   deploying: boolean;
+  error: string | null;
+  initialTemplateKey?: string;
   onDeployToZones: (
     zoneIds: string[],
     rules: CustomRule[],
@@ -31,6 +33,8 @@ export function SecurityView({
   groups,
   deployLog,
   deploying,
+  error,
+  initialTemplateKey,
   onDeployToZones,
   onDeployToGroup,
   onClearLog,
@@ -49,6 +53,12 @@ export function SecurityView({
   const [customAction, setCustomAction] = useState<RuleAction>("block");
 
   const [deployMode, setDeployMode] = useState<DeployMode>("append");
+
+  useEffect(() => {
+    if (initialTemplateKey && templates[initialTemplateKey]) {
+      setSelectedTemplateKey(initialTemplateKey);
+    }
+  }, [initialTemplateKey, templates]);
 
   const toggleZone = (zoneId: string) =>
     setSelectedZoneIds((prev) =>
@@ -111,12 +121,13 @@ export function SecurityView({
     }
 
     try {
+      onToast(`Deploying ${rules.length} rule(s)...`, "info");
       if (targetMode === "zones") {
         await onDeployToZones(selectedZoneIds, rules, deployMode);
       } else {
         await onDeployToGroup(selectedGroupId, rules, deployMode);
       }
-      onToast(`Deploying ${rules.length} rule(s)...`, "info");
+      onToast(`Deployed ${rules.length} rule(s)`, "success");
     } catch (err) {
       onToast(err instanceof Error ? err.message : "Deploy failed", "error");
     }
@@ -153,6 +164,11 @@ export function SecurityView({
           onDeploy={handleDeploy}
         />
         <div className="space-y-4">
+          {error && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+              <p className="text-xs font-display text-red-200">{error}</p>
+            </div>
+          )}
           <DeploymentLog entries={deployLog} onClear={onClearLog} />
         </div>
       </div>

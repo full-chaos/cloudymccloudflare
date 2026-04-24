@@ -26,6 +26,37 @@ function makeLogId(): string {
   return `log-${++logIdCounter}-${Date.now()}`;
 }
 
+function toDeployLogEntry(entry: DeploymentLogEntry): DeployLogEntry {
+  return {
+    id: makeLogId(),
+    zoneId: entry.zoneId,
+    zoneName: entry.zoneName,
+    ruleName: entry.ruleName,
+    status:
+      entry.status === "success"
+        ? "deployed"
+        : entry.status === "failed"
+        ? "error"
+        : "queued",
+    timestamp: entry.createdAt || new Date().toISOString(),
+    errorMessage: entry.errorMessage,
+  };
+}
+
+function resolveQueuedDeployments(
+  prev: DeployLogEntry[],
+  results: DeploymentLogEntry[] | null | undefined,
+): DeployLogEntry[] {
+  if (results && results.length > 0) {
+    const nextEntries = results.map(toDeployLogEntry);
+    return [...nextEntries, ...prev.filter((entry) => entry.status !== "queued")];
+  }
+
+  return prev.map((entry) =>
+    entry.status === "queued" ? { ...entry, status: "deployed" } : entry,
+  );
+}
+
 export function useSecurityRules(): UseSecurityRulesReturn {
   const [deployLog, setDeployLog] = useState<DeployLogEntry[]>([]);
   const [deploying, setDeploying] = useState(false);
@@ -74,35 +105,7 @@ export function useSecurityRules(): UseSecurityRulesReturn {
 
       try {
         const results = await api.security.deployBatch(payload);
-        // Update log entries based on results
-        if (results && results.length > 0) {
-          setDeployLog((prev) => {
-            const newEntries = results.map(
-              (r: DeploymentLogEntry): DeployLogEntry => ({
-                id: makeLogId(),
-                zoneId: r.zoneId,
-                zoneName: r.zoneName,
-                ruleName: r.ruleName,
-                status:
-                  r.status === "success"
-                    ? "deployed"
-                    : r.status === "failed"
-                    ? "error"
-                    : "queued",
-                timestamp: r.createdAt || new Date().toISOString(),
-                errorMessage: r.errorMessage,
-              })
-            );
-            return [...newEntries, ...prev.filter((e) => e.status !== "queued")];
-          });
-        } else {
-          // If no detailed results, mark queued as deployed
-          setDeployLog((prev) =>
-            prev.map((e) =>
-              e.status === "queued" ? { ...e, status: "deployed" } : e
-            )
-          );
-        }
+        setDeployLog((prev) => resolveQueuedDeployments(prev, results));
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Deployment failed";
         setError(errorMsg);
@@ -113,6 +116,7 @@ export function useSecurityRules(): UseSecurityRulesReturn {
               : e
           )
         );
+        throw err;
       } finally {
         setDeploying(false);
       }
@@ -132,7 +136,7 @@ export function useSecurityRules(): UseSecurityRulesReturn {
       setError(null);
 
       const payload: DeployPayload = {
-        target: { type: "group", ids: [groupId] },
+        target: { type: "group", id: groupId },
         rules,
         mode,
       };
@@ -146,33 +150,7 @@ export function useSecurityRules(): UseSecurityRulesReturn {
 
       try {
         const results = await api.security.deployBatch(payload);
-        if (results && results.length > 0) {
-          setDeployLog((prev) => {
-            const newEntries = results.map(
-              (r: DeploymentLogEntry): DeployLogEntry => ({
-                id: makeLogId(),
-                zoneId: r.zoneId,
-                zoneName: r.zoneName,
-                ruleName: r.ruleName,
-                status:
-                  r.status === "success"
-                    ? "deployed"
-                    : r.status === "failed"
-                    ? "error"
-                    : "queued",
-                timestamp: r.createdAt || new Date().toISOString(),
-                errorMessage: r.errorMessage,
-              })
-            );
-            return [...newEntries, ...prev.filter((e) => e.status !== "queued")];
-          });
-        } else {
-          setDeployLog((prev) =>
-            prev.map((e) =>
-              e.status === "queued" ? { ...e, status: "deployed" } : e
-            )
-          );
-        }
+        setDeployLog((prev) => resolveQueuedDeployments(prev, results));
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "Deployment failed";
         setError(errorMsg);
@@ -183,6 +161,7 @@ export function useSecurityRules(): UseSecurityRulesReturn {
               : e
           )
         );
+        throw err;
       } finally {
         setDeploying(false);
       }

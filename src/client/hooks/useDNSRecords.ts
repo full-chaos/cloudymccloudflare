@@ -1,4 +1,4 @@
-import { useState, useCallback, useOptimistic, startTransition } from "react";
+import { useState, useCallback, useOptimistic, startTransition, useRef } from "react";
 import { api } from "../lib/api";
 import type { DNSRecord, CreateDNSInput, UpdateDNSInput } from "../types";
 
@@ -15,6 +15,7 @@ export interface UseDNSRecordsReturn {
     input: UpdateDNSInput
   ) => Promise<DNSRecord>;
   deleteRecord: (zoneId: string, recordId: string) => Promise<void>;
+  batchCreateRecords: (zoneIds: string[], input: CreateDNSInput) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -81,19 +82,24 @@ export function useDNSRecords(): UseDNSRecordsReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentZoneId, setCurrentZoneId] = useState<string | null>(null);
+  const latestRequestId = useRef(0);
 
   const fetchRecords = useCallback(async (zoneId: string) => {
+    const requestId = latestRequestId.current + 1;
+    latestRequestId.current = requestId;
     try {
       setLoading(true);
       setError(null);
       setCurrentZoneId(zoneId);
       const data = await api.dns.list(zoneId);
+      if (latestRequestId.current !== requestId) return;
       setRecords(data);
     } catch (err) {
+      if (latestRequestId.current !== requestId) return;
       setError(err instanceof Error ? err.message : "Failed to fetch DNS records");
       setRecords([]);
     } finally {
-      setLoading(false);
+      if (latestRequestId.current === requestId) setLoading(false);
     }
   }, []);
 
@@ -154,6 +160,22 @@ export function useDNSRecords(): UseDNSRecordsReturn {
     [applyOptimistic]
   );
 
+  const batchCreateRecords = useCallback(
+    async (zoneIds: string[], input: CreateDNSInput): Promise<void> => {
+      const results = await api.dns.batch(zoneIds, { posts: [input] });
+      const failed = results.filter((r) => r.error);
+      if (failed.length > 0) {
+        throw new Error(
+          `Failed to create record in ${failed.length} of ${zoneIds.length} zone(s): ${failed[0].error}`,
+        );
+      }
+      if (currentZoneId && zoneIds.includes(currentZoneId)) {
+        await fetchRecords(currentZoneId);
+      }
+    },
+    [currentZoneId, fetchRecords],
+  );
+
   return {
     records: optimisticRecords,
     loading,
@@ -163,6 +185,7 @@ export function useDNSRecords(): UseDNSRecordsReturn {
     createRecord,
     updateRecord,
     deleteRecord,
+    batchCreateRecords,
     refresh,
   };
 }

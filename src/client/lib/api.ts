@@ -8,6 +8,8 @@ import type {
   CustomRule,
   DeployPayload,
   DeploymentLogEntry,
+  RuleTemplate,
+  ZoneBatchResult,
   ApiResponse,
   AnalyticsRange,
   AccountAnalytics,
@@ -135,10 +137,10 @@ export const api = {
     },
 
     batch(
-      zoneId: string,
+      zoneIds: string[],
       input: BatchDNSInput
-    ): Promise<{ posts?: DNSRecord[]; patches?: DNSRecord[]; deletes?: { id: string }[] }> {
-      return post(`/dns/batch`, { zoneIds: [zoneId], records: input });
+    ): Promise<ZoneBatchResult<{ posts?: DNSRecord[]; patches?: DNSRecord[]; deletes?: { id: string }[] }>[]> {
+      return post(`/dns/batch`, { zoneIds, records: input });
     },
   },
 
@@ -184,7 +186,7 @@ export const api = {
     deploy(
       zoneId: string,
       rules: CustomRule[]
-    ): Promise<{ success: boolean; deployed: number; failed: number }> {
+    ): Promise<CustomRule[]> {
       return post(`/security/${zoneId}/rules`, { rules });
     },
 
@@ -208,8 +210,8 @@ export const api = {
   // ─── Templates ──────────────────────────────────────────────────────────────
   // Server routes: app.route("/api/templates", templates) → /api/templates
   templates: {
-    list(): Promise<Record<string, import("../../shared/types").RuleTemplate>> {
-      return get("/templates");
+    list(): Promise<RuleTemplate[]> {
+      return get<RuleTemplate[]>("/templates");
     },
   },
 

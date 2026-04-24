@@ -12,12 +12,15 @@ interface DNSViewProps {
   groups: Group[];
   records: DNSRecord[];
   loadingRecords: boolean;
+  error: string | null;
   addingRecord: boolean;
   currentZoneId: string | null;
   activeGroupId?: string;
   onSelectZone: (zoneId: string) => void;
   onCreateRecord: (zoneId: string, input: CreateDNSInput) => Promise<DNSRecord>;
+  onBatchCreateRecords: (zoneIds: string[], input: CreateDNSInput) => Promise<void>;
   onDeleteRecord: (zoneId: string, recordId: string) => Promise<void>;
+  onRetry: () => Promise<void>;
   onClearGroupFilter?: () => void;
   onToast: (message: string, type?: ToastType) => void;
 }
@@ -27,11 +30,14 @@ export function DNSView({
   groups,
   records,
   loadingRecords,
+  error,
   currentZoneId,
   activeGroupId,
   onSelectZone,
   onCreateRecord,
+  onBatchCreateRecords,
   onDeleteRecord,
+  onRetry,
   onClearGroupFilter,
   onToast,
 }: DNSViewProps) {
@@ -54,8 +60,17 @@ export function DNSView({
     if (!currentZoneId) return;
     setAddingRecord(true);
     try {
-      await onCreateRecord(currentZoneId, input);
-      onToast("DNS record added", "success");
+      if (batchMode) {
+        const group = groups.find((g) => g.id === selectedGroupId);
+        if (!group || group.zoneIds.length === 0) {
+          throw new Error("Select a group with at least one zone for batch mode");
+        }
+        await onBatchCreateRecords(group.zoneIds, input);
+        onToast(`DNS record added to ${group.zoneIds.length} zone(s)`, "success");
+      } else {
+        await onCreateRecord(currentZoneId, input);
+        onToast("DNS record added", "success");
+      }
     } catch (err) {
       onToast(err instanceof Error ? err.message : "Failed to add record", "error");
     } finally {
@@ -157,7 +172,10 @@ export function DNSView({
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 cursor-pointer">
               <span className="text-xs font-display text-text-secondary">Batch Mode</span>
-              <div
+              <button
+                type="button"
+                role="switch"
+                aria-checked={batchMode}
                 className={`relative w-8 h-4 rounded-full transition-colors ${
                   batchMode ? "bg-accent" : "bg-border"
                 }`}
@@ -168,7 +186,7 @@ export function DNSView({
                     batchMode ? "translate-x-4" : "translate-x-0.5"
                   }`}
                 />
-              </div>
+              </button>
             </label>
           </div>
         </div>
@@ -177,7 +195,7 @@ export function DNSView({
         {batchMode && (
           <div className="bg-accent/5 border border-accent/20 rounded-[10px] p-4">
             <p className="text-xs font-display text-accent mb-2 font-medium">
-              Batch Mode: Changes will be applied to all zones in the selected group
+              Batch Mode: New records will be added to all zones in the selected group
             </p>
             <select
               value={selectedGroupId}
@@ -215,6 +233,19 @@ export function DNSView({
           {loadingRecords ? (
             <div className="py-12 flex items-center justify-center">
               <LoadingSpinner size="sm" message="Loading records..." />
+            </div>
+          ) : error ? (
+            <div className="p-6 space-y-3">
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+                <p className="text-sm font-display text-red-300">{error}</p>
+                <button
+                  type="button"
+                  onClick={() => void onRetry()}
+                  className="mt-3 px-3 py-1.5 text-xs font-semibold rounded bg-red-500/20 text-red-100 hover:bg-red-500/30 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
             </div>
           ) : !currentZoneId ? (
             <EmptyState

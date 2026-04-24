@@ -33,6 +33,7 @@ export default function App() {
   const {
     groups,
     loading: groupsLoading,
+    error: groupsError,
     createGroup,
     deleteGroup,
     addZoneToGroup,
@@ -42,15 +43,19 @@ export default function App() {
   const {
     records,
     loading: recordsLoading,
+    error: recordsError,
     currentZoneId,
     fetchRecords,
     createRecord,
     deleteRecord,
+    batchCreateRecords,
+    refresh: refreshRecords,
   } = useDNSRecords();
 
   const {
     deployLog,
     deploying,
+    error: securityError,
     deployToZones,
     deployToGroup,
     clearLog,
@@ -154,6 +159,7 @@ export default function App() {
             groups={groups}
             zones={zones}
             loading={groupsLoading}
+            error={groupsError}
             onCreateGroup={createGroup}
             onDeleteGroup={deleteGroup}
             onAddZone={addZoneToGroup}
@@ -169,12 +175,15 @@ export default function App() {
             groups={groups}
             records={records}
             loadingRecords={recordsLoading}
+            error={recordsError}
             addingRecord={false}
             currentZoneId={selectedZoneId ?? currentZoneId}
             activeGroupId={selectedGroupId}
             onSelectZone={handleSelectZone}
             onCreateRecord={handleCreateRecord}
+            onBatchCreateRecords={batchCreateRecords}
             onDeleteRecord={handleDeleteRecord}
+            onRetry={refreshRecords}
             onClearGroupFilter={handleClearGroupFilter}
             onToast={addToast}
           />
@@ -187,6 +196,8 @@ export default function App() {
             groups={groups}
             deployLog={deployLog}
             deploying={deploying}
+            error={securityError}
+            initialTemplateKey={securityTemplateKey}
             onDeployToZones={deployToZones}
             onDeployToGroup={deployToGroup}
             onClearLog={clearLog}

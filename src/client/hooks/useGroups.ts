@@ -30,8 +30,8 @@ export function useGroups(): UseGroupsReturn {
       setError(null);
       const data = await api.groups.list();
       setGroups(data);
-    } catch {
-      // API unavailable — groups stay in local state only
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load groups");
     } finally {
       setLoading(false);
     }
@@ -62,9 +62,10 @@ export function useGroups(): UseGroupsReturn {
           prev.map((g) => (g.id === tempId ? created : g))
         );
         return created;
-      } catch {
-        // API unavailable — keep the optimistic group (local-only mode)
-        return tempGroup;
+      } catch (err) {
+        setGroups((prev) => prev.filter((g) => g.id !== tempId));
+        setError(err instanceof Error ? err.message : "Failed to create group");
+        throw err;
       }
     },
     []

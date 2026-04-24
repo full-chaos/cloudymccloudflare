@@ -14,6 +14,7 @@ export type {
   DeployTarget,
   DeployPayload,
   DeploymentLogEntry,
+  ZoneBatchResult,
   ZoneSetting,
   ApiResponse,
   AnalyticsRange,
