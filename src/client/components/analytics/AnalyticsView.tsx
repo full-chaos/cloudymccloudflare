@@ -9,6 +9,7 @@ import { AccountOverview } from "./AccountOverview";
 import { GroupDrilldown } from "./GroupDrilldown";
 import { ZoneDrilldown } from "./ZoneDrilldown";
 import { ClusterDrilldown } from "./ClusterDrilldown";
+import type { Dim } from "./DimensionTabs";
 
 type SubView = "overview" | "group" | "cluster" | "zone";
 
@@ -32,6 +33,7 @@ export function AnalyticsView({ zones, groups, onToast }: AnalyticsViewProps) {
   const [cameFromCluster, setCameFromCluster] = useState(false);
   const [range, setRange] = useState<AnalyticsRange>("24h");
   const [refreshing, setRefreshing] = useState(false);
+  const [activeDim, setActiveDim] = useState<Dim>("country");
 
   const accountQuery = useAccountAnalytics(range);
   const groupQuery = useGroupAnalytics(selectedGroupId, range);
@@ -131,6 +133,8 @@ export function AnalyticsView({ zones, groups, onToast }: AnalyticsViewProps) {
           onBack={handleBackFromZone}
           backLabel={backLabel}
           onRefresh={zoneQuery.refresh}
+          dim={activeDim}
+          onDimChange={setActiveDim}
         />
       );
     }
@@ -147,6 +151,8 @@ export function AnalyticsView({ zones, groups, onToast }: AnalyticsViewProps) {
           onSelectZone={handleSelectZone}
           onBack={handleBackToOverview}
           onRefresh={clusterQuery.refresh}
+          dim={activeDim}
+          onDimChange={setActiveDim}
         />
       );
     }
@@ -162,6 +168,8 @@ export function AnalyticsView({ zones, groups, onToast }: AnalyticsViewProps) {
           onSelectZone={handleSelectZone}
           onBack={handleBackToOverview}
           onRefresh={groupQuery.refresh}
+          dim={activeDim}
+          onDimChange={setActiveDim}
         />
       );
     }
@@ -180,6 +188,8 @@ export function AnalyticsView({ zones, groups, onToast }: AnalyticsViewProps) {
         onSelectZone={handleSelectZone}
         onRefresh={handleRefresh}
         refreshing={refreshing}
+        dim={activeDim}
+        onDimChange={setActiveDim}
       />
     );
   })();
