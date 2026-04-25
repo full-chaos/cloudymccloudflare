@@ -7,6 +7,7 @@ import { zValidatorQuery } from "../utils/zvalidator";
 import {
   getAccountAnalytics,
   getAnalyticsStatus,
+  getClusterAnalytics,
   getGroupAnalytics,
   getZoneAnalytics,
 } from "../services/analytics.service";
@@ -19,21 +20,34 @@ const rangeQueryValidator = zValidatorQuery(analyticsQuerySchema);
 // ─── GET /api/analytics/account?range=24h|7d|30d ─────────────────────────────
 
 analytics.get("/account", rangeQueryValidator, async (c) => {
-  const { range } = c.req.valid("query");
+  const { range, include } = c.req.valid("query");
   const db = createDb(c.env.DB);
-  const result = await getAccountAnalytics(db, range);
+  const result = await getAccountAnalytics(db, range, include);
   return c.json({ success: true, result });
 });
 
 // ─── GET /api/analytics/group/:groupId?range=... ─────────────────────────────
 
 analytics.get("/group/:groupId", rangeQueryValidator, async (c) => {
-  const { range } = c.req.valid("query");
+  const { range, include } = c.req.valid("query");
   const { groupId } = c.req.param();
   const db = createDb(c.env.DB);
-  const result = await getGroupAnalytics(db, groupId, range);
+  const result = await getGroupAnalytics(db, groupId, range, include);
   if (!result) {
     throw new HTTPException(404, { message: `Group ${groupId} not found` });
+  }
+  return c.json({ success: true, result });
+});
+
+// ─── GET /api/analytics/cluster/:name?range=... ───────────────────────────────
+
+analytics.get("/cluster/:name", rangeQueryValidator, async (c) => {
+  const { range, include } = c.req.valid("query");
+  const { name } = c.req.param();
+  const db = createDb(c.env.DB);
+  const result = await getClusterAnalytics(db, name, range, include);
+  if (!result) {
+    throw new HTTPException(404, { message: `Cluster ${name} not found` });
   }
   return c.json({ success: true, result });
 });

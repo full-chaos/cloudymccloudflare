@@ -1,5 +1,3 @@
-import type { Zone } from "../../shared/types";
-
 export type {
   Zone,
   DNSRecord,
@@ -22,9 +20,11 @@ export type {
   AccountTotals,
   AccountAnalytics,
   GroupAnalytics,
+  ClusterAnalytics,
   ZoneTimeSeriesPoint,
   ZoneAnalytics,
   AnalyticsStatus,
+  DomainCluster,
 } from "../../shared/types";
 
 export type ViewType = "dashboard" | "groups" | "dns" | "security" | "templates" | "analytics";
@@ -45,9 +45,4 @@ export interface DeployLogEntry {
   status: "queued" | "deployed" | "error";
   timestamp: string;
   errorMessage?: string;
-}
-
-export interface DomainCluster {
-  baseName: string;
-  zones: Zone[];
 }

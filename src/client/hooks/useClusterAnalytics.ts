@@ -1,38 +1,38 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
-import type { AnalyticsRange, GroupAnalytics } from "../types";
+import type { AnalyticsRange, ClusterAnalytics } from "../types";
 
-export interface UseGroupAnalyticsReturn {
-  data: GroupAnalytics | null;
+export interface UseClusterAnalyticsReturn {
+  data: ClusterAnalytics | null;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
 }
 
-export function useGroupAnalytics(
-  groupId: string | null,
+export function useClusterAnalytics(
+  clusterName: string | null,
   range: AnalyticsRange,
-): UseGroupAnalyticsReturn {
-  const [data, setData] = useState<GroupAnalytics | null>(null);
+): UseClusterAnalyticsReturn {
+  const [data, setData] = useState<ClusterAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!groupId) {
+    if (!clusterName) {
       setData(null);
       return;
     }
     try {
       setLoading(true);
       setError(null);
-      const result = await api.analytics.group(groupId, range, { includePerZoneSeries: true });
+      const result = await api.analytics.cluster(clusterName, range);
       setData(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load group analytics");
+      setError(err instanceof Error ? err.message : "Failed to load cluster analytics");
     } finally {
       setLoading(false);
     }
-  }, [groupId, range]);
+  }, [clusterName, range]);
 
   useEffect(() => {
     fetchData();

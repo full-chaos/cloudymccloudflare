@@ -14,6 +14,7 @@ import type {
   AnalyticsRange,
   AccountAnalytics,
   GroupAnalytics,
+  ClusterAnalytics,
   ZoneAnalytics,
   AnalyticsStatus,
 } from "../types";
@@ -21,6 +22,18 @@ import type {
 // ─── Base Fetch Wrapper ───────────────────────────────────────────────────────
 
 const BASE_URL = "/api";
+
+interface AnalyticsOptions {
+  includePerZoneSeries?: boolean;
+}
+
+function analyticsPath(path: string, range: AnalyticsRange, options?: AnalyticsOptions): string {
+  const params = new URLSearchParams({ range });
+  if (options?.includePerZoneSeries) {
+    params.set("include", "perZoneSeries");
+  }
+  return `${path}?${params.toString()}`;
+}
 
 class ApiError extends Error {
   constructor(
@@ -218,12 +231,18 @@ export const api = {
   // ─── Analytics ──────────────────────────────────────────────────────────────
   // Server routes: app.route("/api/analytics", analytics)
   analytics: {
-    account(range: AnalyticsRange): Promise<AccountAnalytics> {
-      return get<AccountAnalytics>(`/analytics/account?range=${range}`);
+    account(range: AnalyticsRange, options?: AnalyticsOptions): Promise<AccountAnalytics> {
+      return get<AccountAnalytics>(analyticsPath("/analytics/account", range, options));
     },
 
-    group(groupId: string, range: AnalyticsRange): Promise<GroupAnalytics> {
-      return get<GroupAnalytics>(`/analytics/group/${groupId}?range=${range}`);
+    group(groupId: string, range: AnalyticsRange, options?: AnalyticsOptions): Promise<GroupAnalytics> {
+      return get<GroupAnalytics>(analyticsPath(`/analytics/group/${groupId}`, range, options));
+    },
+
+    cluster(name: string, range: AnalyticsRange, options?: AnalyticsOptions): Promise<ClusterAnalytics> {
+      return get<ClusterAnalytics>(
+        analyticsPath(`/analytics/cluster/${encodeURIComponent(name)}`, range, options)
+      );
     },
 
     zone(zoneId: string, range: AnalyticsRange): Promise<ZoneAnalytics> {

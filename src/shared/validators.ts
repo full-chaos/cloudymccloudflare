@@ -206,8 +206,33 @@ export const analyticsRangeSchema = z.enum(["24h", "7d", "30d"]);
 
 export type AnalyticsRangeInput = z.infer<typeof analyticsRangeSchema>;
 
+export const analyticsIncludeTokenSchema = z.enum(["perZoneSeries"]);
+
+export type AnalyticsIncludeToken = z.infer<typeof analyticsIncludeTokenSchema>;
+
+const analyticsIncludeSchema = z.string().optional().transform((value, ctx) => {
+  const includes = new Set<AnalyticsIncludeToken>();
+  if (!value) return includes;
+
+  for (const token of value.split(",").map((part) => part.trim()).filter(Boolean)) {
+    const parsed = analyticsIncludeTokenSchema.safeParse(token);
+    if (!parsed.success) {
+      ctx.addIssue({
+        code: "invalid_value",
+        values: analyticsIncludeTokenSchema.options,
+        message: `Unknown analytics include token: ${token}`,
+      });
+      return z.NEVER;
+    }
+    includes.add(parsed.data);
+  }
+
+  return includes;
+});
+
 export const analyticsQuerySchema = z.object({
   range: analyticsRangeSchema.optional().default("24h"),
+  include: analyticsIncludeSchema,
 });
 
 export type AnalyticsQueryInput = z.infer<typeof analyticsQuerySchema>;

@@ -4,6 +4,7 @@ import { api } from "../../lib/api";
 import { useAccountAnalytics } from "../../hooks/useAccountAnalytics";
 import { useGroupAnalytics } from "../../hooks/useGroupAnalytics";
 import { useZoneAnalytics } from "../../hooks/useZoneAnalytics";
+import { useClusterAnalytics } from "../../hooks/useClusterAnalytics";
 import { AccountOverview } from "./AccountOverview";
 import { GroupDrilldown } from "./GroupDrilldown";
 import { ZoneDrilldown } from "./ZoneDrilldown";
@@ -34,6 +35,7 @@ export function AnalyticsView({ zones, groups, onToast }: AnalyticsViewProps) {
 
   const accountQuery = useAccountAnalytics(range);
   const groupQuery = useGroupAnalytics(selectedGroupId, range);
+  const clusterQuery = useClusterAnalytics(selectedClusterName, range);
   const zoneQuery = useZoneAnalytics(selectedZoneId, range);
 
   const handleRefresh = useCallback(async () => {
@@ -45,13 +47,13 @@ export function AnalyticsView({ zones, groups, onToast }: AnalyticsViewProps) {
         "success",
       );
       // Refetch whichever sub-view is currently active.
-      await Promise.all([accountQuery.refresh(), groupQuery.refresh(), zoneQuery.refresh()]);
+      await Promise.all([accountQuery.refresh(), groupQuery.refresh(), clusterQuery.refresh(), zoneQuery.refresh()]);
     } catch (err) {
       onToast(err instanceof Error ? err.message : "Refresh failed", "error");
     } finally {
       setRefreshing(false);
     }
-  }, [accountQuery, groupQuery, zoneQuery, onToast]);
+  }, [accountQuery, groupQuery, clusterQuery, zoneQuery, onToast]);
 
   const handleSelectGroup = useCallback((groupId: string) => {
     setSelectedGroupId(groupId);
@@ -137,15 +139,14 @@ export function AnalyticsView({ zones, groups, onToast }: AnalyticsViewProps) {
       return (
         <ClusterDrilldown
           clusterName={selectedClusterName}
-          account={accountQuery.data}
-          loading={accountQuery.loading}
-          error={accountQuery.error}
+          data={clusterQuery.data}
+          loading={clusterQuery.loading}
+          error={clusterQuery.error}
           range={range}
           onRangeChange={setRange}
           onSelectZone={handleSelectZone}
           onBack={handleBackToOverview}
-          onRefresh={accountQuery.refresh}
-          zones={zones}
+          onRefresh={clusterQuery.refresh}
         />
       );
     }
@@ -176,6 +177,7 @@ export function AnalyticsView({ zones, groups, onToast }: AnalyticsViewProps) {
         onRangeChange={setRange}
         onSelectGroup={handleSelectGroup}
         onSelectCluster={handleSelectCluster}
+        onSelectZone={handleSelectZone}
         onRefresh={handleRefresh}
         refreshing={refreshing}
       />
