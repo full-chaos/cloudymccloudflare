@@ -17,6 +17,9 @@ import type {
   ClusterAnalytics,
   ZoneAnalytics,
   AnalyticsStatus,
+  AnalyticsDimensionAggregate,
+  AnalyticsDimensionKey,
+  AnalyticsScope,
 } from "../types";
 
 // ─── Base Fetch Wrapper ───────────────────────────────────────────────────────
@@ -256,8 +259,35 @@ export const api = {
     refresh(): Promise<{ rowsUpserted: number; zonesQueried: number }> {
       return post<{ rowsUpserted: number; zonesQueried: number }>("/analytics/refresh");
     },
+
+    dimensions(
+      scope: AnalyticsScope,
+      dim: AnalyticsDimensionKey,
+      range: AnalyticsRange,
+    ): Promise<AnalyticsDimensionAggregate> {
+      const path = dimensionPathForScope(scope);
+      const params = new URLSearchParams({ range, dim });
+      return get<AnalyticsDimensionAggregate>(`${path}?${params.toString()}`);
+    },
   },
 };
+
+export function dimensionPathForScope(scope: AnalyticsScope): string {
+  switch (scope.kind) {
+    case "account":
+      return "/analytics/account/dimensions";
+    case "group":
+      return `/analytics/group/${encodeURIComponent(scope.id)}/dimensions`;
+    case "cluster":
+      return `/analytics/cluster/${encodeURIComponent(scope.id)}/dimensions`;
+    case "zone":
+      return `/analytics/zone/${encodeURIComponent(scope.id)}/dimensions`;
+    default: {
+      const _exhaustive: never = scope;
+      return _exhaustive;
+    }
+  }
+}
 
 export { ApiError };
 export type { ApiResponse };

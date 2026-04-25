@@ -25,6 +25,9 @@ export type {
   ZoneAnalytics,
   AnalyticsStatus,
   DomainCluster,
+  AnalyticsDimensionAggregate,
+  AnalyticsDimensionKey,
+  AnalyticsScope,
 } from "../../shared/types";
 
 export type ViewType = "dashboard" | "groups" | "dns" | "security" | "templates" | "analytics";

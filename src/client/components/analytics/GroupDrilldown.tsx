@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import type { AnalyticsRange, GroupAnalytics } from "../../types";
-import { formatBytes, formatCount, formatPercent } from "../../lib/format";
+import { computeCacheHitRatio, formatBytes, formatCount, formatPercent } from "../../lib/format";
 import { binSeriesIfNeeded, binSeriesByKeyIfNeeded } from "../../lib/timeseries";
 import { MetricCard } from "./MetricCard";
 import { TimeRangePicker } from "./TimeRangePicker";
@@ -10,6 +10,9 @@ import { EmptyState } from "../shared/EmptyState";
 import { RequestsChart } from "./RequestsChart";
 import { StackedAreaChart } from "./StackedAreaChart";
 import { TopNBarChart } from "./TopNBarChart";
+import { CacheHitScatter } from "./CacheHitScatter";
+import { DimensionsSection } from "./DimensionsSection";
+import type { Dim } from "./DimensionTabs";
 
 type Metric = "requests" | "bytes" | "cachedBytes" | "threats";
 
@@ -29,6 +32,8 @@ interface GroupDrilldownProps {
   onSelectZone: (zoneId: string) => void;
   onBack: () => void;
   onRefresh: () => void;
+  dim: Dim;
+  onDimChange: (next: Dim) => void;
 }
 
 export function GroupDrilldown({
@@ -40,6 +45,8 @@ export function GroupDrilldown({
   onSelectZone,
   onBack,
   onRefresh,
+  dim,
+  onDimChange,
 }: GroupDrilldownProps) {
   const [metric, setMetric] = useState<Metric>("requests");
 
@@ -188,15 +195,18 @@ export function GroupDrilldown({
         </section>
         <section className="bg-bg-secondary border border-border rounded-[10px] p-4 flex flex-col">
           <h2 className="text-sm font-semibold font-display text-text-primary mb-4">
-            Cache Performance
+            Cache hit ratio vs Bandwidth
           </h2>
-          <div className="flex-1 flex items-center justify-center">
-            <EmptyState
-              icon="◇"
-              title="Coming soon"
-              description="Cache scatter plot will be added in a future update."
-            />
-          </div>
+          <CacheHitScatter
+            zones={data.perZone.map((z) => ({
+              id: z.zoneId,
+              name: z.zoneName ?? z.zoneId,
+              bytes: z.bytes,
+              cacheHitRatio: computeCacheHitRatio(z.bytes, z.cachedBytes),
+            }))}
+            onZoneClick={onSelectZone}
+            emptyMessage="No bandwidth data for these zones."
+          />
         </section>
       </div>
 
@@ -219,6 +229,13 @@ export function GroupDrilldown({
           />
         )}
       </section>
+
+      <DimensionsSection
+        scope={{ kind: "group", id: data.groupId }}
+        range={range}
+        dim={dim}
+        onDimChange={onDimChange}
+      />
     </div>
   );
 }

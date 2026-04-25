@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { AnalyticsRange, ClusterAnalytics } from "../../types";
-import { formatBytes, formatCount, formatPercent } from "../../lib/format";
+import { computeCacheHitRatio, formatBytes, formatCount, formatPercent } from "../../lib/format";
 import { binSeriesIfNeeded, binSeriesByKeyIfNeeded } from "../../lib/timeseries";
 import { MetricCard } from "./MetricCard";
 import { TimeRangePicker } from "./TimeRangePicker";
@@ -10,6 +10,9 @@ import { EmptyState } from "../shared/EmptyState";
 import { RequestsChart } from "./RequestsChart";
 import { StackedAreaChart } from "./StackedAreaChart";
 import { TopNBarChart } from "./TopNBarChart";
+import { CacheHitScatter } from "./CacheHitScatter";
+import { DimensionsSection } from "./DimensionsSection";
+import type { Dim } from "./DimensionTabs";
 
 type Metric = "requests" | "bytes" | "cachedBytes" | "threats";
 
@@ -23,6 +26,8 @@ interface ClusterDrilldownProps {
   onSelectZone: (zoneId: string) => void;
   onBack: () => void;
   onRefresh: () => void;
+  dim: Dim;
+  onDimChange: (next: Dim) => void;
 }
 
 const METRIC_TABS: Array<{ value: Metric; label: string }> = [
@@ -42,6 +47,8 @@ export function ClusterDrilldown({
   onSelectZone,
   onBack,
   onRefresh,
+  dim,
+  onDimChange,
 }: ClusterDrilldownProps) {
   const [metric, setMetric] = useState<Metric>("requests");
 
@@ -178,7 +185,21 @@ export function ClusterDrilldown({
             ariaLabel="Top TLDs in cluster"
           />
         </section>
-        <div className="hidden lg:block" />
+        <section className="bg-bg-secondary border border-border rounded-[10px] p-4 flex flex-col">
+          <h2 className="text-sm font-semibold font-display text-text-primary mb-4">
+            Cache hit ratio vs Bandwidth
+          </h2>
+          <CacheHitScatter
+            zones={data.perZone.map((z) => ({
+              id: z.zoneId,
+              name: z.zoneName ?? z.zoneId,
+              bytes: z.bytes,
+              cacheHitRatio: computeCacheHitRatio(z.bytes, z.cachedBytes),
+            }))}
+            onZoneClick={onSelectZone}
+            emptyMessage="No bandwidth data for these zones."
+          />
+        </section>
       </div>
 
       <section>
@@ -192,6 +213,13 @@ export function ClusterDrilldown({
           sparklineMetric="requests"
         />
       </section>
+
+      <DimensionsSection
+        scope={{ kind: "cluster", id: clusterName }}
+        range={range}
+        dim={dim}
+        onDimChange={onDimChange}
+      />
     </div>
   );
 }

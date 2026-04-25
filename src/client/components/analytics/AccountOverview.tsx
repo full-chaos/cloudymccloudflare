@@ -21,6 +21,8 @@ import { TopNBarChart } from "./TopNBarChart";
 import { TrafficTreemap } from "./TrafficTreemap";
 import { CacheHitScatter } from "./CacheHitScatter";
 import { MetricSparkline } from "./MetricSparkline";
+import { DimensionsSection } from "./DimensionsSection";
+import type { Dim } from "./DimensionTabs";
 
 interface AccountOverviewProps {
   data: AccountAnalytics | null;
@@ -35,6 +37,8 @@ interface AccountOverviewProps {
   onSelectZone: (zoneId: string) => void;
   onRefresh: () => void;
   refreshing?: boolean;
+  dim: Dim;
+  onDimChange: (next: Dim) => void;
 }
 
 export function AccountOverview({
@@ -50,6 +54,8 @@ export function AccountOverview({
   onSelectZone,
   onRefresh,
   refreshing,
+  dim,
+  onDimChange,
 }: AccountOverviewProps) {
   const groupRollups = useMemo(() => aggregateByGroup(data?.perZone ?? [], groups), [data, groups]);
   const clusterRollups = useMemo(
@@ -353,6 +359,13 @@ export function AccountOverview({
           </div>
         </section>
       )}
+
+      <DimensionsSection
+        scope={{ kind: "account" }}
+        range={range}
+        dim={dim}
+        onDimChange={onDimChange}
+      />
     </div>
   );
 }
