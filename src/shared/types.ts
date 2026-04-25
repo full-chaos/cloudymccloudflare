@@ -15,6 +15,11 @@ export interface Zone {
   nameServers: string[];
 }
 
+export interface DomainCluster<TZone extends { name: string } = Zone> {
+  baseName: string;
+  zones: TZone[];
+}
+
 // ─── DNS ──────────────────────────────────────────────────────────────────────
 
 export type DNSRecordType = "A" | "AAAA" | "CNAME" | "MX" | "TXT" | "NS" | "SRV" | "CAA";
@@ -188,6 +193,19 @@ export interface GroupAnalytics {
   windowEnd: string;
   groupId: string;
   groupName: string;
+  zoneCount: number;
+  totals: AccountTotals;
+  perZone: ZoneMetrics[];
+  series: ZoneTimeSeriesPoint[];
+  lastFetchedAt: string | null;
+  sampleInterval: number;
+}
+
+export interface ClusterAnalytics {
+  range: AnalyticsRange;
+  windowStart: string;
+  windowEnd: string;
+  clusterName: string;
   zoneCount: number;
   totals: AccountTotals;
   perZone: ZoneMetrics[];

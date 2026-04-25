@@ -12,11 +12,13 @@ import type {
   AccountTotals,
   AnalyticsRange,
   AnalyticsStatus,
+  ClusterAnalytics,
   GroupAnalytics,
   ZoneAnalytics,
   ZoneMetrics,
   ZoneTimeSeriesPoint,
 } from "@shared/types";
+import { toClusters } from "@shared/clusters";
 
 // ─── Window math ──────────────────────────────────────────────────────────────
 
@@ -223,6 +225,75 @@ export async function getGroupAnalytics(
     groupId: group.id,
     groupName: group.name,
     zoneCount: memberZoneRows.length,
+    totals: summarize(perZone),
+    perZone,
+    series,
+    lastFetchedAt,
+    sampleInterval,
+  };
+}
+
+// ─── Aggregator: Cluster ──────────────────────────────────────────────────────
+
+export async function getClusterAnalytics(
+  db: Database,
+  clusterName: string,
+  range: AnalyticsRange,
+): Promise<ClusterAnalytics | null> {
+  const { since, until } = rangeToWindow(range);
+
+  const zoneRows = await db
+    .select({ id: zoneCache.id, name: zoneCache.name })
+    .from(zoneCache);
+  const cluster = toClusters(zoneRows).find((c) => c.baseName === clusterName);
+  if (!cluster) return null;
+
+  const zoneIds = cluster.zones.map((z) => z.id);
+  const trafficRows = await db
+    .select({
+      zoneId: analyticsZoneHourly.zoneId,
+      requests: sql<number>`COALESCE(SUM(${analyticsZoneHourly.requests}), 0)`,
+      bytes: sql<number>`COALESCE(SUM(${analyticsZoneHourly.bytes}), 0)`,
+      cachedBytes: sql<number>`COALESCE(SUM(${analyticsZoneHourly.cachedBytes}), 0)`,
+      threats: sql<number>`COALESCE(SUM(${analyticsZoneHourly.threats}), 0)`,
+      sampleInterval: sql<number>`MAX(${analyticsZoneHourly.sampleInterval})`,
+    })
+    .from(analyticsZoneHourly)
+    .where(
+      and(
+        inArray(analyticsZoneHourly.zoneId, zoneIds),
+        gte(analyticsZoneHourly.hourBucket, since),
+        lt(analyticsZoneHourly.hourBucket, until),
+      ),
+    )
+    .groupBy(analyticsZoneHourly.zoneId);
+
+  const trafficByZone = new Map(trafficRows.map((r) => [r.zoneId, r]));
+  const perZone: ZoneMetrics[] = cluster.zones.map((z) => {
+    const t = trafficByZone.get(z.id);
+    return {
+      zoneId: z.id,
+      zoneName: z.name,
+      requests: t ? Number(t.requests) : 0,
+      bytes: t ? Number(t.bytes) : 0,
+      cachedBytes: t ? Number(t.cachedBytes) : 0,
+      threats: t ? Number(t.threats) : 0,
+    };
+  });
+
+  const sampleInterval = trafficRows.reduce(
+    (max, r) => Math.max(max, Number(r.sampleInterval) || 1),
+    1,
+  );
+  const lastFetchedAt = await getLastFetchedAt(db);
+  const series = await fillAggregatedHourlySeries(db, zoneIds, range, lastFetchedAt);
+
+  return {
+    range,
+    windowStart: since,
+    windowEnd: until,
+    clusterName,
+    zoneCount: cluster.zones.length,
     totals: summarize(perZone),
     perZone,
     series,

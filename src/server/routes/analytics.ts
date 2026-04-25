@@ -7,6 +7,7 @@ import { zValidatorQuery } from "../utils/zvalidator";
 import {
   getAccountAnalytics,
   getAnalyticsStatus,
+  getClusterAnalytics,
   getGroupAnalytics,
   getZoneAnalytics,
 } from "../services/analytics.service";
@@ -34,6 +35,19 @@ analytics.get("/group/:groupId", rangeQueryValidator, async (c) => {
   const result = await getGroupAnalytics(db, groupId, range);
   if (!result) {
     throw new HTTPException(404, { message: `Group ${groupId} not found` });
+  }
+  return c.json({ success: true, result });
+});
+
+// ─── GET /api/analytics/cluster/:name?range=... ───────────────────────────────
+
+analytics.get("/cluster/:name", rangeQueryValidator, async (c) => {
+  const { range } = c.req.valid("query");
+  const { name } = c.req.param();
+  const db = createDb(c.env.DB);
+  const result = await getClusterAnalytics(db, name, range);
+  if (!result) {
+    throw new HTTPException(404, { message: `Cluster ${name} not found` });
   }
   return c.json({ success: true, result });
 });
