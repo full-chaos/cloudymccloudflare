@@ -206,6 +206,10 @@ export const analyticsRangeSchema = z.enum(["24h", "7d", "30d"]);
 
 export type AnalyticsRangeInput = z.infer<typeof analyticsRangeSchema>;
 
+export const analyticsDimensionSchema = z.enum(["country", "status", "protocol", "firewall"]);
+
+export type AnalyticsDimensionInput = z.infer<typeof analyticsDimensionSchema>;
+
 export const analyticsIncludeTokenSchema = z.enum(["perZoneSeries"]);
 
 export type AnalyticsIncludeToken = z.infer<typeof analyticsIncludeTokenSchema>;
@@ -236,6 +240,12 @@ export const analyticsQuerySchema = z.object({
 });
 
 export type AnalyticsQueryInput = z.infer<typeof analyticsQuerySchema>;
+
+export const analyticsDimensionQuerySchema = analyticsQuerySchema.extend({
+  dim: analyticsDimensionSchema,
+});
+
+export type AnalyticsDimensionQueryInput = z.infer<typeof analyticsDimensionQuerySchema>;
 
 // ─── Route Param / Query Schemas ──────────────────────────────────────────────
 
