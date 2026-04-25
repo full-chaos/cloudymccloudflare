@@ -47,7 +47,16 @@ query ZoneBatch($zoneTags: [string!]!, $since: Time!, $until: Time!) {
         orderBy: [datetime_DESC]
       ) {
         dimensions { datetime }
-        sum { requests, bytes, cachedBytes, threats }
+        sum {
+          requests
+          bytes
+          cachedBytes
+          threats
+          countryMap { clientCountryName, requests }
+          responseStatusMap { edgeResponseStatus, requests }
+          clientHTTPVersionMap { clientHTTPProtocol, requests }
+          clientSSLMap { clientSSLProtocol, requests }
+        }
         avg { sampleInterval }
       }
     }
@@ -65,6 +74,10 @@ interface ZoneBatchResponse {
           bytes: number;
           cachedBytes: number;
           threats: number;
+          countryMap: Array<{ clientCountryName: string | null; requests: number }>;
+          responseStatusMap: Array<{ edgeResponseStatus: number | null; requests: number }>;
+          clientHTTPVersionMap: Array<{ clientHTTPProtocol: string | null; requests: number }>;
+          clientSSLMap: Array<{ clientSSLProtocol: string | null; requests: number }>;
         };
         avg: { sampleInterval: number };
       }>;
