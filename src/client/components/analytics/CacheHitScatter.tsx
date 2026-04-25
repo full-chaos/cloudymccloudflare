@@ -11,6 +11,8 @@ import {
 } from "recharts";
 import { formatBytes, formatPercent } from "../../lib/format";
 
+const INITIAL_DIM = { width: 1, height: 1 };
+
 interface CacheHitScatterProps {
   zones: {
     id: string;
@@ -65,7 +67,7 @@ export function CacheHitScatter({
 
   return (
     <div style={{ height, width: "100%" }}>
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" initialDimension={INITIAL_DIM}>
         <ScatterChart margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="#1f1f2e" strokeDasharray="2 2" />
           <XAxis

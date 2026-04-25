@@ -9,6 +9,8 @@ import {
   YAxis,
 } from "recharts";
 
+const INITIAL_DIM = { width: 1, height: 1 };
+
 export interface TopNBarChartProps {
   data: { id: string; label: string; value: number }[];
   accent: string;
@@ -50,7 +52,7 @@ export function TopNBarChart({
 
   return (
     <div className="w-full" style={{ height }} aria-label={ariaLabel}>
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" initialDimension={INITIAL_DIM}>
         <BarChart
           data={sortedData}
           layout="vertical"

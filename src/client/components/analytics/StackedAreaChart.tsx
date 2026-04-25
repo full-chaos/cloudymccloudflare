@@ -11,6 +11,8 @@ import {
 import type { ZoneTimeSeriesPoint } from "../../../shared/types";
 import { formatBytes, formatCount, formatHourFull, formatHourLabel } from "../../lib/format";
 
+const INITIAL_DIM = { width: 1, height: 1 };
+
 type Metric = "requests" | "bytes" | "cachedBytes" | "threats";
 
 interface StackedAreaChartProps {
@@ -99,7 +101,7 @@ export function StackedAreaChart({
 
   return (
     <div style={{ height, width: "100%" }}>
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" initialDimension={INITIAL_DIM}>
         <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <defs>
             {keys.map((key) => (

@@ -2,6 +2,8 @@ import { useId, useMemo } from "react";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import type { ZoneTimeSeriesPoint } from "../../../shared/types";
 
+const INITIAL_DIM = { width: 1, height: 1 };
+
 type Metric = "requests" | "bytes" | "cachedBytes" | "threats";
 
 interface MetricSparklineProps {
@@ -45,7 +47,7 @@ export function MetricSparkline({
 
   return (
     <div style={{ width, height, pointerEvents: "none" }} aria-label={ariaLabel}>
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" initialDimension={INITIAL_DIM}>
         <AreaChart data={data} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id={`spark-${gid}`} x1="0" y1="0" x2="0" y2="1">

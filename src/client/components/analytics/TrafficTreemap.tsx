@@ -3,6 +3,8 @@ import { ResponsiveContainer, Treemap, Tooltip } from "recharts";
 import { formatCount } from "../../lib/format";
 import { colorForZone } from "../../lib/colors";
 
+const INITIAL_DIM = { width: 1, height: 1 };
+
 interface TrafficTreemapProps {
   zones: {
     id: string;
@@ -117,7 +119,7 @@ export function TrafficTreemap({
 
   return (
     <div style={{ height, width: "100%" }}>
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" initialDimension={INITIAL_DIM}>
         <Treemap
           data={data}
           dataKey="requests"
