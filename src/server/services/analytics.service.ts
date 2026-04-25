@@ -157,6 +157,7 @@ export async function getGroupAnalytics(
     .where(eq(groupZones.groupId, groupId));
 
   if (memberZoneRows.length === 0) {
+    const lastFetchedAt = await getLastFetchedAt(db);
     return {
       range,
       windowStart: since,
@@ -166,7 +167,8 @@ export async function getGroupAnalytics(
       zoneCount: 0,
       totals: emptyTotals(),
       perZone: [],
-      lastFetchedAt: await getLastFetchedAt(db),
+      series: await fillAggregatedHourlySeries(db, [], range, lastFetchedAt),
+      lastFetchedAt,
       sampleInterval: 1,
     };
   }
@@ -211,6 +213,8 @@ export async function getGroupAnalytics(
     (max, r) => Math.max(max, Number(r.sampleInterval) || 1),
     1,
   );
+  const lastFetchedAt = await getLastFetchedAt(db);
+  const series = await fillAggregatedHourlySeries(db, zoneIds, range, lastFetchedAt);
 
   return {
     range,
@@ -221,7 +225,8 @@ export async function getGroupAnalytics(
     zoneCount: memberZoneRows.length,
     totals: summarize(perZone),
     perZone,
-    lastFetchedAt: await getLastFetchedAt(db),
+    series,
+    lastFetchedAt,
     sampleInterval,
   };
 }

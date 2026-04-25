@@ -191,6 +191,7 @@ export interface GroupAnalytics {
   zoneCount: number;
   totals: AccountTotals;
   perZone: ZoneMetrics[];
+  series: ZoneTimeSeriesPoint[];
   lastFetchedAt: string | null;
   sampleInterval: number;
 }
