@@ -10,6 +10,8 @@ import { EmptyState } from "../shared/EmptyState";
 import { RequestsChart } from "./RequestsChart";
 import { StackedAreaChart } from "./StackedAreaChart";
 import { TopNBarChart } from "./TopNBarChart";
+import { DimensionsSection } from "./DimensionsSection";
+import type { Dim } from "./DimensionTabs";
 
 type Metric = "requests" | "bytes" | "cachedBytes" | "threats";
 
@@ -23,6 +25,8 @@ interface ClusterDrilldownProps {
   onSelectZone: (zoneId: string) => void;
   onBack: () => void;
   onRefresh: () => void;
+  dim: Dim;
+  onDimChange: (next: Dim) => void;
 }
 
 const METRIC_TABS: Array<{ value: Metric; label: string }> = [
@@ -42,6 +46,8 @@ export function ClusterDrilldown({
   onSelectZone,
   onBack,
   onRefresh,
+  dim,
+  onDimChange,
 }: ClusterDrilldownProps) {
   const [metric, setMetric] = useState<Metric>("requests");
 
@@ -192,6 +198,13 @@ export function ClusterDrilldown({
           sparklineMetric="requests"
         />
       </section>
+
+      <DimensionsSection
+        scope={{ kind: "cluster", id: clusterName }}
+        range={range}
+        dim={dim}
+        onDimChange={onDimChange}
+      />
     </div>
   );
 }
