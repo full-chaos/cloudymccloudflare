@@ -183,6 +183,7 @@ export interface AccountAnalytics {
   totals: AccountTotals;
   perZone: ZoneMetrics[];
   series: ZoneTimeSeriesPoint[];
+  perZoneSeries?: Record<string, ZoneTimeSeriesPoint[]>;
   lastFetchedAt: string | null;
   sampleInterval: number; // max across buckets; >1 means CF sampled
 }
@@ -197,6 +198,7 @@ export interface GroupAnalytics {
   totals: AccountTotals;
   perZone: ZoneMetrics[];
   series: ZoneTimeSeriesPoint[];
+  perZoneSeries?: Record<string, ZoneTimeSeriesPoint[]>;
   lastFetchedAt: string | null;
   sampleInterval: number;
 }
@@ -210,6 +212,7 @@ export interface ClusterAnalytics {
   totals: AccountTotals;
   perZone: ZoneMetrics[];
   series: ZoneTimeSeriesPoint[];
+  perZoneSeries?: Record<string, ZoneTimeSeriesPoint[]>;
   lastFetchedAt: string | null;
   sampleInterval: number;
 }

@@ -19,6 +19,9 @@ import type {
   ZoneTimeSeriesPoint,
 } from "@shared/types";
 import { toClusters } from "@shared/clusters";
+import type { AnalyticsIncludeToken } from "@shared/validators";
+
+type AnalyticsIncludeSet = Set<AnalyticsIncludeToken>;
 
 // ─── Window math ──────────────────────────────────────────────────────────────
 
@@ -80,10 +83,11 @@ export function computeCacheHitRatio(bytes: number, cachedBytes: number): number
 export async function getAccountAnalytics(
   db: Database,
   range: AnalyticsRange,
+  include: AnalyticsIncludeSet = new Set(),
 ): Promise<AccountAnalytics> {
   const { since, until } = rangeToWindow(range);
 
-  const accountZoneRows = await db.select({ id: zoneCache.id }).from(zoneCache);
+  const accountZoneRows = await db.select({ id: zoneCache.id, name: zoneCache.name }).from(zoneCache);
   const zoneIds = accountZoneRows.map((z) => z.id);
 
   const perZoneRows = await db
@@ -106,14 +110,18 @@ export async function getAccountAnalytics(
     )
     .groupBy(analyticsZoneHourly.zoneId, zoneCache.name);
 
-  const perZone: ZoneMetrics[] = perZoneRows.map((r) => ({
-    zoneId: r.zoneId,
-    zoneName: r.zoneName ?? undefined,
-    requests: Number(r.requests),
-    bytes: Number(r.bytes),
-    cachedBytes: Number(r.cachedBytes),
-    threats: Number(r.threats),
-  }));
+  const trafficByZone = new Map(perZoneRows.map((r) => [r.zoneId, r]));
+  const perZone: ZoneMetrics[] = accountZoneRows.map((z) => {
+    const t = trafficByZone.get(z.id);
+    return {
+      zoneId: z.id,
+      zoneName: z.name,
+      requests: t ? Number(t.requests) : 0,
+      bytes: t ? Number(t.bytes) : 0,
+      cachedBytes: t ? Number(t.cachedBytes) : 0,
+      threats: t ? Number(t.threats) : 0,
+    };
+  });
 
   const totals = summarize(perZone);
   const sampleInterval = perZoneRows.reduce(
@@ -122,6 +130,9 @@ export async function getAccountAnalytics(
   );
   const lastFetchedAt = await getLastFetchedAt(db);
   const series = await fillAggregatedHourlySeries(db, zoneIds, range, lastFetchedAt);
+  const perZoneSeries = include.has("perZoneSeries")
+    ? await fillPerZoneHourlySeries(db, zoneIds, range, lastFetchedAt)
+    : undefined;
 
   return {
     range,
@@ -130,6 +141,7 @@ export async function getAccountAnalytics(
     totals,
     perZone,
     series,
+    ...(perZoneSeries ? { perZoneSeries } : {}),
     lastFetchedAt,
     sampleInterval,
   };
@@ -141,6 +153,7 @@ export async function getGroupAnalytics(
   db: Database,
   groupId: string,
   range: AnalyticsRange,
+  include: AnalyticsIncludeSet = new Set(),
 ): Promise<GroupAnalytics | null> {
   const { since, until } = rangeToWindow(range);
 
@@ -170,6 +183,7 @@ export async function getGroupAnalytics(
       totals: emptyTotals(),
       perZone: [],
       series: await fillAggregatedHourlySeries(db, [], range, lastFetchedAt),
+      ...(include.has("perZoneSeries") ? { perZoneSeries: {} } : {}),
       lastFetchedAt,
       sampleInterval: 1,
     };
@@ -217,6 +231,9 @@ export async function getGroupAnalytics(
   );
   const lastFetchedAt = await getLastFetchedAt(db);
   const series = await fillAggregatedHourlySeries(db, zoneIds, range, lastFetchedAt);
+  const perZoneSeries = include.has("perZoneSeries")
+    ? await fillPerZoneHourlySeries(db, zoneIds, range, lastFetchedAt)
+    : undefined;
 
   return {
     range,
@@ -228,6 +245,7 @@ export async function getGroupAnalytics(
     totals: summarize(perZone),
     perZone,
     series,
+    ...(perZoneSeries ? { perZoneSeries } : {}),
     lastFetchedAt,
     sampleInterval,
   };
@@ -239,6 +257,7 @@ export async function getClusterAnalytics(
   db: Database,
   clusterName: string,
   range: AnalyticsRange,
+  include: AnalyticsIncludeSet = new Set(),
 ): Promise<ClusterAnalytics | null> {
   const { since, until } = rangeToWindow(range);
 
@@ -287,6 +306,9 @@ export async function getClusterAnalytics(
   );
   const lastFetchedAt = await getLastFetchedAt(db);
   const series = await fillAggregatedHourlySeries(db, zoneIds, range, lastFetchedAt);
+  const perZoneSeries = include.has("perZoneSeries")
+    ? await fillPerZoneHourlySeries(db, zoneIds, range, lastFetchedAt)
+    : undefined;
 
   return {
     range,
@@ -297,6 +319,7 @@ export async function getClusterAnalytics(
     totals: summarize(perZone),
     perZone,
     series,
+    ...(perZoneSeries ? { perZoneSeries } : {}),
     lastFetchedAt,
     sampleInterval,
   };
@@ -517,18 +540,77 @@ export async function fillAggregatedHourlySeries(
     .groupBy(analyticsZoneHourly.hourBucket)
     .orderBy(analyticsZoneHourly.hourBucket);
 
+  const normalizedBuckets = buckets.map((b) => ({
+    hourBucket: b.hourBucket,
+    requests: Number(b.requests),
+    bytes: Number(b.bytes),
+    cachedBytes: Number(b.cachedBytes),
+    threats: Number(b.threats),
+  }));
+
   return fillHourlySeries(
-    buckets.map((b) => ({
-      hourBucket: b.hourBucket,
-      requests: Number(b.requests),
-      bytes: Number(b.bytes),
-      cachedBytes: Number(b.cachedBytes),
-      threats: Number(b.threats),
-    })),
+    normalizedBuckets,
     since,
     until,
-    lastFetchedAt,
+    extendLastFetchedThroughLatestBucket(normalizedBuckets, lastFetchedAt),
   );
+}
+
+async function fillPerZoneHourlySeries(
+  db: Database,
+  zoneIds: string[],
+  range: AnalyticsRange,
+  lastFetchedAt: string | null,
+): Promise<Record<string, ZoneTimeSeriesPoint[]>> {
+  const { since, until } = rangeToWindow(range);
+  const entries = await Promise.all(
+    zoneIds.map(async (zoneId) => {
+      const buckets = await db
+        .select({
+          hourBucket: analyticsZoneHourly.hourBucket,
+          requests: analyticsZoneHourly.requests,
+          bytes: analyticsZoneHourly.bytes,
+          cachedBytes: analyticsZoneHourly.cachedBytes,
+          threats: analyticsZoneHourly.threats,
+        })
+        .from(analyticsZoneHourly)
+        .where(
+          and(
+            eq(analyticsZoneHourly.zoneId, zoneId),
+            gte(analyticsZoneHourly.hourBucket, since),
+            lt(analyticsZoneHourly.hourBucket, until),
+          ),
+        )
+        .orderBy(analyticsZoneHourly.hourBucket);
+
+      return [
+        zoneId,
+        fillHourlySeries(
+          buckets,
+          since,
+          until,
+          extendLastFetchedThroughLatestBucket(buckets, lastFetchedAt),
+        ),
+      ] as const;
+    }),
+  );
+
+  return Object.fromEntries(entries);
+}
+
+function extendLastFetchedThroughLatestBucket(
+  buckets: Array<{ hourBucket: string }>,
+  lastFetchedAt: string | null,
+): string | null {
+  const latestBucket = buckets.at(-1);
+  if (!latestBucket) return lastFetchedAt;
+
+  const latestBucketEnd = Date.parse(latestBucket.hourBucket) + HOUR_MS;
+  if (lastFetchedAt === null || latestBucketEnd > Date.parse(lastFetchedAt)) {
+    return new Date(latestBucketEnd).toISOString();
+  }
+
+  return lastFetchedAt;
 }
 
 async function getLastFetchedAt(db: Database): Promise<string | null> {
