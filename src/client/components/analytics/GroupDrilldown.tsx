@@ -211,10 +211,9 @@ export function GroupDrilldown({
             description="Add zones via the Groups view to see their analytics here."
           />
         ) : (
-          <SortableZoneTable 
-            rows={data.perZone} 
-            onRowClick={onSelectZone} 
-            // TODO(D2 wiring): enable once SortableZoneTable accepts seriesByZoneId
+          <SortableZoneTable
+            rows={data.perZone}
+            onRowClick={onSelectZone}
             seriesByZoneId={data.perZoneSeries}
             sparklineMetric="requests"
           />
