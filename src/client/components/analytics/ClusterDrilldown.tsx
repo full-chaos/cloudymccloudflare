@@ -1,28 +1,21 @@
-import { useMemo } from "react";
-import type {
-  AccountAnalytics,
-  AccountTotals,
-  AnalyticsRange,
-  Zone,
-  ZoneMetrics,
-} from "../../types";
-import {
-  computeCacheHitRatio,
-  formatBytes,
-  formatCount,
-  formatPercent,
-} from "../../lib/format";
-import { toClusters } from "../../lib/clusters";
+import { useMemo, useState } from "react";
+import type { AnalyticsRange, ClusterAnalytics } from "../../types";
+import { formatBytes, formatCount, formatPercent } from "../../lib/format";
+import { binSeriesIfNeeded, binSeriesByKeyIfNeeded } from "../../lib/timeseries";
 import { MetricCard } from "./MetricCard";
 import { TimeRangePicker } from "./TimeRangePicker";
 import { SortableZoneTable } from "./SortableZoneTable";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { EmptyState } from "../shared/EmptyState";
+import { RequestsChart } from "./RequestsChart";
+import { StackedAreaChart } from "./StackedAreaChart";
+import { TopNBarChart } from "./TopNBarChart";
+
+type Metric = "requests" | "bytes" | "cachedBytes" | "threats";
 
 interface ClusterDrilldownProps {
   clusterName: string;
-  account: AccountAnalytics | null;
-  zones: Zone[];
+  data: ClusterAnalytics | null;
   loading: boolean;
   error: string | null;
   range: AnalyticsRange;
@@ -32,15 +25,16 @@ interface ClusterDrilldownProps {
   onRefresh: () => void;
 }
 
-/**
- * Cluster drilldown reuses the already-loaded account analytics rather than
- * firing a new request — cluster membership is pure client-side namespace math,
- * so we just filter the per-zone rows by the cluster's zone IDs.
- */
+const METRIC_TABS: Array<{ value: Metric; label: string }> = [
+  { value: "requests", label: "Requests" },
+  { value: "bytes", label: "Bandwidth" },
+  { value: "cachedBytes", label: "Cached" },
+  { value: "threats", label: "Threats" },
+];
+
 export function ClusterDrilldown({
   clusterName,
-  account,
-  zones,
+  data,
   loading,
   error,
   range,
@@ -49,48 +43,19 @@ export function ClusterDrilldown({
   onBack,
   onRefresh,
 }: ClusterDrilldownProps) {
-  const { clusterZones, perZone, totals } = useMemo(() => {
-    const cluster = toClusters(zones).find((c) => c.baseName === clusterName);
-    const clusterZones = cluster?.zones ?? [];
-    const inCluster = new Set(clusterZones.map((z) => z.id));
+  const [metric, setMetric] = useState<Metric>("requests");
 
-    const trafficByZone = new Map(
-      (account?.perZone ?? []).map((z) => [z.zoneId, z] as const),
-    );
+  const binnedSeries = useMemo(() => {
+    if (!data?.series) return [];
+    return binSeriesIfNeeded(data.series, range);
+  }, [data?.series, range]);
 
-    // Preserve zones with zero traffic so users can see the full cluster,
-    // not just the busy subset.
-    const perZone: ZoneMetrics[] = clusterZones.map((z) => {
-      const t = trafficByZone.get(z.id);
-      return {
-        zoneId: z.id,
-        zoneName: z.name,
-        requests: t?.requests ?? 0,
-        bytes: t?.bytes ?? 0,
-        cachedBytes: t?.cachedBytes ?? 0,
-        threats: t?.threats ?? 0,
-      };
-    });
+  const binnedPerZone = useMemo(() => {
+    if (!data?.perZoneSeries) return {};
+    return binSeriesByKeyIfNeeded(data.perZoneSeries, range);
+  }, [data?.perZoneSeries, range]);
 
-    const summed = perZone.reduce(
-      (acc, z) => ({
-        requests: acc.requests + z.requests,
-        bytes: acc.bytes + z.bytes,
-        cachedBytes: acc.cachedBytes + z.cachedBytes,
-        threats: acc.threats + z.threats,
-      }),
-      { requests: 0, bytes: 0, cachedBytes: 0, threats: 0 },
-    );
-
-    const totals: AccountTotals = {
-      ...summed,
-      cacheHitRatio: computeCacheHitRatio(summed.bytes, summed.cachedBytes),
-    };
-
-    return { clusterZones, perZone, totals, inCluster };
-  }, [clusterName, zones, account]);
-
-  if (loading && !account) {
+  if (loading && !data) {
     return <LoadingSpinner message="Loading cluster analytics…" />;
   }
 
@@ -105,7 +70,7 @@ export function ClusterDrilldown({
     );
   }
 
-  if (clusterZones.length === 0) {
+  if (!data) {
     return (
       <EmptyState
         icon="◇"
@@ -115,6 +80,8 @@ export function ClusterDrilldown({
       />
     );
   }
+
+  const t = data.totals;
 
   return (
     <div className="flex flex-col gap-6">
@@ -130,40 +97,100 @@ export function ClusterDrilldown({
             {clusterName}
           </h1>
           <p className="text-xs font-display text-text-muted mt-1">
-            {clusterZones.length} zone{clusterZones.length !== 1 ? "s" : ""} in cluster
+            {data.perZone.length} zone{data.perZone.length !== 1 ? "s" : ""} in cluster
           </p>
         </div>
         <TimeRangePicker
           value={range}
           onChange={onRangeChange}
-          sampleInterval={account?.sampleInterval}
-          lastFetchedAt={account?.lastFetchedAt ?? null}
+          sampleInterval={data.sampleInterval}
+          lastFetchedAt={data.lastFetchedAt}
         />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <MetricCard label="Requests" value={formatCount(totals.requests)} accent="#f97316" icon={<Dot />} />
-        <MetricCard label="Bandwidth" value={formatBytes(totals.bytes)} accent="#60a5fa" icon={<Dot />} />
-        <MetricCard label="Cached" value={formatBytes(totals.cachedBytes)} accent="#34d399" icon={<Dot />} />
+        <MetricCard label="Requests" value={formatCount(t.requests)} accent="#f97316" icon={<Dot />} />
+        <MetricCard label="Bandwidth" value={formatBytes(t.bytes)} accent="#60a5fa" icon={<Dot />} />
+        <MetricCard label="Cached" value={formatBytes(t.cachedBytes)} accent="#34d399" icon={<Dot />} />
         <MetricCard
           label="Cache hit ratio"
-          value={Number.isNaN(totals.cacheHitRatio) ? "—" : formatPercent(totals.cacheHitRatio, 1)}
+          value={Number.isNaN(t.cacheHitRatio) ? "—" : formatPercent(t.cacheHitRatio, 1)}
           accent="#a78bfa"
           icon={<Dot />}
         />
         <MetricCard
           label="Threats"
-          value={formatCount(totals.threats)}
-          accent={totals.threats > 0 ? "#f87171" : "#555"}
+          value={formatCount(t.threats)}
+          accent={t.threats > 0 ? "#f87171" : "#555"}
           icon={<Dot />}
         />
+      </div>
+
+      <section className="bg-bg-secondary border border-border rounded-[10px] p-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 className="text-sm font-semibold font-display text-text-primary">
+            Cluster trend
+          </h2>
+          <div className="inline-flex rounded-lg border border-border bg-bg-tertiary p-0.5">
+            {METRIC_TABS.map((m) => {
+              const active = m.value === metric;
+              return (
+                <button
+                  key={m.value}
+                  onClick={() => setMetric(m.value)}
+                  className={`px-3 py-1 text-xs font-mono rounded transition-colors ${
+                    active
+                      ? "bg-accent/10 text-accent"
+                      : "text-text-secondary hover:text-text-primary"
+                  }`}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <RequestsChart series={binnedSeries} metric={metric} />
+      </section>
+
+      <section className="bg-bg-secondary border border-border rounded-[10px] p-4">
+        <h2 className="text-sm font-semibold font-display text-text-primary mb-4">
+          Per-TLD composition
+        </h2>
+        <StackedAreaChart
+          seriesByKey={binnedPerZone}
+          keyLabels={Object.fromEntries(data.perZone.map(z => [z.zoneId, z.zoneName ?? z.zoneId]))}
+          metric={metric}
+        />
+      </section>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section className="bg-bg-secondary border border-border rounded-[10px] p-4">
+          <h2 className="text-sm font-semibold font-display text-text-primary mb-4">
+            Top TLDs in cluster
+          </h2>
+          <TopNBarChart
+            data={data.perZone.map(z => ({ id: z.zoneId, label: z.zoneName ?? z.zoneId, value: z.requests }))}
+            accent="#f97316"
+            formatValue={formatCount}
+            n={10}
+            onItemClick={onSelectZone}
+            ariaLabel="Top TLDs in cluster"
+          />
+        </section>
+        <div className="hidden lg:block" />
       </div>
 
       <section>
         <h2 className="text-sm font-semibold font-display text-text-primary mb-3">
           Zones in this cluster
         </h2>
-        <SortableZoneTable rows={perZone} onRowClick={onSelectZone} />
+        <SortableZoneTable
+          rows={data.perZone}
+          onRowClick={onSelectZone}
+          seriesByZoneId={data.perZoneSeries}
+          sparklineMetric="requests"
+        />
       </section>
     </div>
   );
