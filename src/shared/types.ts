@@ -177,6 +177,7 @@ export interface AccountAnalytics {
   windowEnd: string; // ISO
   totals: AccountTotals;
   perZone: ZoneMetrics[];
+  series: ZoneTimeSeriesPoint[];
   lastFetchedAt: string | null;
   sampleInterval: number; // max across buckets; >1 means CF sampled
 }

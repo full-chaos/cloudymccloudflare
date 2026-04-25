@@ -81,6 +81,9 @@ export async function getAccountAnalytics(
 ): Promise<AccountAnalytics> {
   const { since, until } = rangeToWindow(range);
 
+  const accountZoneRows = await db.select({ id: zoneCache.id }).from(zoneCache);
+  const zoneIds = accountZoneRows.map((z) => z.id);
+
   const perZoneRows = await db
     .select({
       zoneId: analyticsZoneHourly.zoneId,
@@ -116,6 +119,7 @@ export async function getAccountAnalytics(
     1,
   );
   const lastFetchedAt = await getLastFetchedAt(db);
+  const series = await fillAggregatedHourlySeries(db, zoneIds, range, lastFetchedAt);
 
   return {
     range,
@@ -123,6 +127,7 @@ export async function getAccountAnalytics(
     windowEnd: until,
     totals,
     perZone,
+    series,
     lastFetchedAt,
     sampleInterval,
   };
@@ -402,6 +407,52 @@ export function fillHourlySeries(
     });
   }
   return series;
+}
+
+export async function fillAggregatedHourlySeries(
+  db: Database,
+  zoneIds: string[],
+  range: AnalyticsRange,
+  lastFetchedAtOverride?: string | null,
+): Promise<ZoneTimeSeriesPoint[]> {
+  const { since, until } = rangeToWindow(range);
+  const lastFetchedAt = lastFetchedAtOverride ?? (await getLastFetchedAt(db));
+
+  if (zoneIds.length === 0) {
+    return fillHourlySeries([], since, until, lastFetchedAt);
+  }
+
+  const buckets = await db
+    .select({
+      hourBucket: analyticsZoneHourly.hourBucket,
+      requests: sql<number>`COALESCE(SUM(${analyticsZoneHourly.requests}), 0)`,
+      bytes: sql<number>`COALESCE(SUM(${analyticsZoneHourly.bytes}), 0)`,
+      cachedBytes: sql<number>`COALESCE(SUM(${analyticsZoneHourly.cachedBytes}), 0)`,
+      threats: sql<number>`COALESCE(SUM(${analyticsZoneHourly.threats}), 0)`,
+    })
+    .from(analyticsZoneHourly)
+    .where(
+      and(
+        inArray(analyticsZoneHourly.zoneId, zoneIds),
+        gte(analyticsZoneHourly.hourBucket, since),
+        lt(analyticsZoneHourly.hourBucket, until),
+      ),
+    )
+    .groupBy(analyticsZoneHourly.hourBucket)
+    .orderBy(analyticsZoneHourly.hourBucket);
+
+  return fillHourlySeries(
+    buckets.map((b) => ({
+      hourBucket: b.hourBucket,
+      requests: Number(b.requests),
+      bytes: Number(b.bytes),
+      cachedBytes: Number(b.cachedBytes),
+      threats: Number(b.threats),
+    })),
+    since,
+    until,
+    lastFetchedAt,
+  );
 }
 
 async function getLastFetchedAt(db: Database): Promise<string | null> {
