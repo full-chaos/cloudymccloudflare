@@ -10,6 +10,8 @@ import { EmptyState } from "../shared/EmptyState";
 import { RequestsChart } from "./RequestsChart";
 import { StackedAreaChart } from "./StackedAreaChart";
 import { TopNBarChart } from "./TopNBarChart";
+import { DimensionsSection } from "./DimensionsSection";
+import type { Dim } from "./DimensionTabs";
 
 type Metric = "requests" | "bytes" | "cachedBytes" | "threats";
 
@@ -29,6 +31,8 @@ interface GroupDrilldownProps {
   onSelectZone: (zoneId: string) => void;
   onBack: () => void;
   onRefresh: () => void;
+  dim: Dim;
+  onDimChange: (next: Dim) => void;
 }
 
 export function GroupDrilldown({
@@ -40,6 +44,8 @@ export function GroupDrilldown({
   onSelectZone,
   onBack,
   onRefresh,
+  dim,
+  onDimChange,
 }: GroupDrilldownProps) {
   const [metric, setMetric] = useState<Metric>("requests");
 
@@ -219,6 +225,13 @@ export function GroupDrilldown({
           />
         )}
       </section>
+
+      <DimensionsSection
+        scope={{ kind: "group", id: data.groupId }}
+        range={range}
+        dim={dim}
+        onDimChange={onDimChange}
+      />
     </div>
   );
 }
