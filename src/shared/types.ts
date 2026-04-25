@@ -250,3 +250,26 @@ export interface AnalyticsStatus {
   lastRunStatus: "success" | "partial" | "error" | "never";
   lastRunError: string | null;
 }
+
+// ─── Dimension Aggregates (Phase E) ───────────────────────────────────────────
+
+export type AnalyticsDimensionKey = "country" | "status" | "protocol" | "firewall";
+
+export type AnalyticsDimensionAggregate =
+  | { kind: "country"; items: Array<{ key: string; requests: number }> }
+  | { kind: "status"; items: Array<{ key: string; requests: number }> }
+  | {
+      kind: "protocol";
+      httpVersions: Array<{ key: string; requests: number }>;
+      sslVersions: Array<{ key: string; requests: number }>;
+    }
+  | {
+      kind: "firewall";
+      rules: Array<{ ruleId: string; source: string; action: string; events: number }>;
+    };
+
+export type AnalyticsScope =
+  | { kind: "account" }
+  | { kind: "group"; id: string }
+  | { kind: "cluster"; id: string }
+  | { kind: "zone"; id: string };
