@@ -6,6 +6,8 @@ import { TimeRangePicker } from "./TimeRangePicker";
 import { RequestsChart } from "./RequestsChart";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { EmptyState } from "../shared/EmptyState";
+import { DimensionsSection } from "./DimensionsSection";
+import type { Dim } from "./DimensionTabs";
 
 type Metric = "requests" | "bytes" | "cachedBytes" | "threats";
 
@@ -18,6 +20,8 @@ interface ZoneDrilldownProps {
   onBack: () => void;
   backLabel: string;
   onRefresh: () => void;
+  dim: Dim;
+  onDimChange: (next: Dim) => void;
 }
 
 const METRIC_TABS: Array<{ value: Metric; label: string }> = [
@@ -36,6 +40,8 @@ export function ZoneDrilldown({
   onBack,
   backLabel,
   onRefresh,
+  dim,
+  onDimChange,
 }: ZoneDrilldownProps) {
   const [metric, setMetric] = useState<Metric>("requests");
 
@@ -136,6 +142,13 @@ export function ZoneDrilldown({
         </div>
         <RequestsChart series={data.series} metric={metric} />
       </section>
+
+      <DimensionsSection
+        scope={{ kind: "zone", id: data.zoneId }}
+        range={range}
+        dim={dim}
+        onDimChange={onDimChange}
+      />
     </div>
   );
 }
