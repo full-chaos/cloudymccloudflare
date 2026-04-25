@@ -1,8 +1,13 @@
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { Database } from "../db";
 import {
+  analyticsZoneCountryHourly,
+  analyticsZoneFirewallHourly,
   analyticsSyncLog,
   analyticsZoneHourly,
+  analyticsZoneHttpVersionHourly,
+  analyticsZoneSslVersionHourly,
+  analyticsZoneStatusHourly,
   groupZones,
   groups as groupsTable,
   zoneCache,
@@ -22,6 +27,24 @@ import { toClusters } from "@shared/clusters";
 import type { AnalyticsIncludeToken } from "@shared/validators";
 
 type AnalyticsIncludeSet = Set<AnalyticsIncludeToken>;
+
+export type AnalyticsDimension = "country" | "status" | "protocol" | "firewall";
+
+export type AnalyticsDimensionScope =
+  | { kind: "account" }
+  | { kind: "group"; id: string }
+  | { kind: "cluster"; id: string }
+  | { kind: "zone"; id: string };
+
+export type AnalyticsDimensionAggregate =
+  | { kind: "country"; items: Array<{ key: string; requests: number }> }
+  | { kind: "status"; items: Array<{ key: string; requests: number }> }
+  | {
+      kind: "protocol";
+      httpVersions: Array<{ key: string; requests: number }>;
+      sslVersions: Array<{ key: string; requests: number }>;
+    }
+  | { kind: "firewall"; rules: Array<{ ruleId: string; source: string; action: string; events: number }> };
 
 // ─── Window math ──────────────────────────────────────────────────────────────
 
@@ -421,7 +444,210 @@ export async function getAnalyticsStatus(db: Database): Promise<AnalyticsStatus>
   };
 }
 
+// ─── Aggregator: Dimensions ──────────────────────────────────────────────────
+
+export async function getDimensionAggregate(
+  db: Database,
+  scope: AnalyticsDimensionScope,
+  dim: AnalyticsDimension,
+  range: AnalyticsRange,
+): Promise<AnalyticsDimensionAggregate | null> {
+  const { since, until } = rangeToWindow(range);
+  const zoneIds = await getDimensionZoneIds(db, scope);
+  if (!zoneIds) return null;
+
+  if (dim === "protocol") {
+    return {
+      kind: "protocol",
+      httpVersions: await getProtocolRows(db, zoneIds, since, until, "http"),
+      sslVersions: await getProtocolRows(db, zoneIds, since, until, "ssl"),
+    };
+  }
+
+  if (dim === "firewall") {
+    return { kind: "firewall", rules: await getFirewallRows(db, zoneIds, since, until) };
+  }
+
+  if (dim === "status") {
+    return { kind: "status", items: await getStatusRows(db, zoneIds, since, until) };
+  }
+
+  return { kind: "country", items: await getCountryRows(db, zoneIds, since, until) };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function getDimensionZoneIds(
+  db: Database,
+  scope: AnalyticsDimensionScope,
+): Promise<string[] | null> {
+  if (scope.kind === "zone") return [scope.id];
+
+  if (scope.kind === "account") {
+    const rows = await db.select({ id: zoneCache.id }).from(zoneCache);
+    return rows.map((row) => row.id);
+  }
+
+  if (scope.kind === "group") {
+    const groupRows = await db
+      .select({ id: groupsTable.id })
+      .from(groupsTable)
+      .where(eq(groupsTable.id, scope.id))
+      .limit(1);
+    if (groupRows.length === 0) return null;
+
+    const rows = await db
+      .select({ zoneId: groupZones.zoneId })
+      .from(groupZones)
+      .where(eq(groupZones.groupId, scope.id));
+    return rows.map((row) => row.zoneId);
+  }
+
+  const rows = await db.select({ id: zoneCache.id, name: zoneCache.name }).from(zoneCache);
+  const cluster = toClusters(rows).find((candidate) => candidate.baseName === scope.id);
+  return cluster ? cluster.zones.map((zone) => zone.id) : null;
+}
+
+async function getCountryRows(
+  db: Database,
+  zoneIds: string[],
+  since: string,
+  until: string,
+): Promise<Array<{ key: string; requests: number }>> {
+  if (zoneIds.length === 0) return [];
+
+  const rows = await db
+    .select({
+      key: analyticsZoneCountryHourly.countryCode,
+      requests: sql<number>`COALESCE(SUM(${analyticsZoneCountryHourly.requests}), 0)`,
+    })
+    .from(analyticsZoneCountryHourly)
+    .where(
+      and(
+        inArray(analyticsZoneCountryHourly.zoneId, zoneIds),
+        gte(analyticsZoneCountryHourly.hourBucket, since),
+        lt(analyticsZoneCountryHourly.hourBucket, until),
+      ),
+    )
+    .groupBy(analyticsZoneCountryHourly.countryCode)
+    .orderBy(desc(sql<number>`COALESCE(SUM(${analyticsZoneCountryHourly.requests}), 0)`))
+    .limit(100);
+
+  return rows.map((row) => ({ key: row.key, requests: Number(row.requests) }));
+}
+
+async function getStatusRows(
+  db: Database,
+  zoneIds: string[],
+  since: string,
+  until: string,
+): Promise<Array<{ key: string; requests: number }>> {
+  if (zoneIds.length === 0) return [];
+
+  const rows = await db
+    .select({
+      key: analyticsZoneStatusHourly.statusCode,
+      requests: sql<number>`COALESCE(SUM(${analyticsZoneStatusHourly.requests}), 0)`,
+    })
+    .from(analyticsZoneStatusHourly)
+    .where(
+      and(
+        inArray(analyticsZoneStatusHourly.zoneId, zoneIds),
+        gte(analyticsZoneStatusHourly.hourBucket, since),
+        lt(analyticsZoneStatusHourly.hourBucket, until),
+      ),
+    )
+    .groupBy(analyticsZoneStatusHourly.statusCode)
+    .orderBy(desc(sql<number>`COALESCE(SUM(${analyticsZoneStatusHourly.requests}), 0)`));
+
+  return rows.map((row) => ({ key: String(row.key), requests: Number(row.requests) }));
+}
+
+async function getProtocolRows(
+  db: Database,
+  zoneIds: string[],
+  since: string,
+  until: string,
+  kind: "http" | "ssl",
+): Promise<Array<{ key: string; requests: number }>> {
+  if (zoneIds.length === 0) return [];
+
+  if (kind === "http") {
+    const rows = await db
+      .select({
+        key: analyticsZoneHttpVersionHourly.httpVersion,
+        requests: sql<number>`COALESCE(SUM(${analyticsZoneHttpVersionHourly.requests}), 0)`,
+      })
+      .from(analyticsZoneHttpVersionHourly)
+      .where(
+        and(
+          inArray(analyticsZoneHttpVersionHourly.zoneId, zoneIds),
+          gte(analyticsZoneHttpVersionHourly.hourBucket, since),
+          lt(analyticsZoneHttpVersionHourly.hourBucket, until),
+        ),
+      )
+      .groupBy(analyticsZoneHttpVersionHourly.httpVersion)
+      .orderBy(desc(sql<number>`COALESCE(SUM(${analyticsZoneHttpVersionHourly.requests}), 0)`));
+    return rows.map((row) => ({ key: row.key, requests: Number(row.requests) }));
+  }
+
+  const rows = await db
+    .select({
+      key: analyticsZoneSslVersionHourly.sslVersion,
+      requests: sql<number>`COALESCE(SUM(${analyticsZoneSslVersionHourly.requests}), 0)`,
+    })
+    .from(analyticsZoneSslVersionHourly)
+    .where(
+      and(
+        inArray(analyticsZoneSslVersionHourly.zoneId, zoneIds),
+        gte(analyticsZoneSslVersionHourly.hourBucket, since),
+        lt(analyticsZoneSslVersionHourly.hourBucket, until),
+      ),
+    )
+    .groupBy(analyticsZoneSslVersionHourly.sslVersion)
+    .orderBy(desc(sql<number>`COALESCE(SUM(${analyticsZoneSslVersionHourly.requests}), 0)`));
+
+  return rows.map((row) => ({ key: row.key, requests: Number(row.requests) }));
+}
+
+async function getFirewallRows(
+  db: Database,
+  zoneIds: string[],
+  since: string,
+  until: string,
+): Promise<Array<{ ruleId: string; source: string; action: string; events: number }>> {
+  if (zoneIds.length === 0) return [];
+
+  const rows = await db
+    .select({
+      ruleId: analyticsZoneFirewallHourly.ruleId,
+      source: analyticsZoneFirewallHourly.source,
+      action: analyticsZoneFirewallHourly.action,
+      events: sql<number>`COALESCE(SUM(${analyticsZoneFirewallHourly.events}), 0)`,
+    })
+    .from(analyticsZoneFirewallHourly)
+    .where(
+      and(
+        inArray(analyticsZoneFirewallHourly.zoneId, zoneIds),
+        gte(analyticsZoneFirewallHourly.hourBucket, since),
+        lt(analyticsZoneFirewallHourly.hourBucket, until),
+      ),
+    )
+    .groupBy(
+      analyticsZoneFirewallHourly.ruleId,
+      analyticsZoneFirewallHourly.source,
+      analyticsZoneFirewallHourly.action,
+    )
+    .orderBy(desc(sql<number>`COALESCE(SUM(${analyticsZoneFirewallHourly.events}), 0)`))
+    .limit(50);
+
+  return rows.map((row) => ({
+    ruleId: row.ruleId,
+    source: row.source,
+    action: row.action,
+    events: Number(row.events),
+  }));
+}
 
 function summarize(perZone: ZoneMetrics[]): AccountTotals {
   const totals = perZone.reduce(
