@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type {
   AccountAnalytics,
   AccountTotals,
@@ -7,13 +7,20 @@ import type {
   Group,
   Zone,
   ZoneMetrics,
+  ZoneTimeSeriesPoint,
 } from "../../types";
 import { computeCacheHitRatio, formatBytes, formatCount, formatPercent } from "../../lib/format";
 import { toClusters } from "../../lib/clusters";
+import { binSeriesIfNeeded } from "../../lib/timeseries";
 import { MetricCard } from "./MetricCard";
 import { TimeRangePicker } from "./TimeRangePicker";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { EmptyState } from "../shared/EmptyState";
+import { RequestsChart } from "./RequestsChart";
+import { TopNBarChart } from "./TopNBarChart";
+import { TrafficTreemap } from "./TrafficTreemap";
+import { CacheHitScatter } from "./CacheHitScatter";
+import { MetricSparkline } from "./MetricSparkline";
 
 interface AccountOverviewProps {
   data: AccountAnalytics | null;
@@ -25,6 +32,7 @@ interface AccountOverviewProps {
   onRangeChange: (range: AnalyticsRange) => void;
   onSelectGroup: (groupId: string) => void;
   onSelectCluster: (clusterName: string) => void;
+  onSelectZone: (zoneId: string) => void;
   onRefresh: () => void;
   refreshing?: boolean;
 }
@@ -39,6 +47,7 @@ export function AccountOverview({
   onRangeChange,
   onSelectGroup,
   onSelectCluster,
+  onSelectZone,
   onRefresh,
   refreshing,
 }: AccountOverviewProps) {
@@ -47,6 +56,38 @@ export function AccountOverview({
     () => aggregateByCluster(data?.perZone ?? [], zones),
     [data, zones],
   );
+
+  const [metric, setMetric] = useState<"requests" | "bytes" | "cachedBytes" | "threats">("requests");
+
+  const perZoneSeriesByGroup = useMemo(() => {
+    if (!data?.perZoneSeries) return {};
+    const result: Record<string, ZoneTimeSeriesPoint[]> = {};
+    for (const g of groups) {
+      const seriesList = g.zoneIds
+        .map((id) => data.perZoneSeries![id])
+        .filter(Boolean);
+      result[g.id] = mergeSeries(seriesList);
+    }
+    const groupedZoneIds = new Set(groups.flatMap((g) => g.zoneIds));
+    const ungroupedSeries = Object.entries(data.perZoneSeries)
+      .filter(([id]) => !groupedZoneIds.has(id))
+      .map(([, series]) => series);
+    result[UNGROUPED_KEY] = mergeSeries(ungroupedSeries);
+    return result;
+  }, [data?.perZoneSeries, groups]);
+
+  const perZoneSeriesByCluster = useMemo(() => {
+    if (!data?.perZoneSeries) return {};
+    const result: Record<string, ZoneTimeSeriesPoint[]> = {};
+    const clusters = toClusters(zones);
+    for (const c of clusters) {
+      const seriesList = c.zones
+        .map((z) => data.perZoneSeries![z.id])
+        .filter(Boolean);
+      result[c.baseName] = mergeSeries(seriesList);
+    }
+    return result;
+  }, [data?.perZoneSeries, zones]);
 
   if (loading && !data) {
     return <LoadingSpinner message="Loading analytics…" />;
@@ -133,6 +174,140 @@ export function AccountOverview({
         />
       </div>
 
+      <section className="bg-bg-secondary border border-border rounded-[10px] p-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 className="text-sm font-semibold font-display text-text-primary">
+            Hourly over last {range}
+          </h2>
+          <div className="inline-flex rounded-lg border border-border bg-bg-tertiary p-0.5">
+            {[
+              { value: "requests", label: "Requests" },
+              { value: "bytes", label: "Bandwidth" },
+              { value: "cachedBytes", label: "Cached" },
+              { value: "threats", label: "Threats" },
+            ].map((m) => {
+              const active = m.value === metric;
+              return (
+                <button
+                  key={m.value}
+                  onClick={() => setMetric(m.value as any)}
+                  className={`px-3 py-1 text-xs font-mono rounded transition-colors ${
+                    active
+                      ? "bg-accent/10 text-accent"
+                      : "text-text-secondary hover:text-text-primary"
+                  }`}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <RequestsChart series={binSeriesIfNeeded(data.series, range)} metric={metric} />
+      </section>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <section className="bg-bg-secondary border border-border rounded-[10px] p-4">
+          <h2 className="text-sm font-semibold font-display text-text-primary mb-4">
+            Top zones by requests
+          </h2>
+          <TopNBarChart
+            data={data.perZone.map((z) => ({
+              id: z.zoneId,
+              label: z.zoneName ?? z.zoneId,
+              value: z.requests,
+            }))}
+            accent="#f97316"
+            formatValue={formatCount}
+            n={10}
+            onItemClick={onSelectZone}
+            ariaLabel="Top zones by requests"
+          />
+        </section>
+        <section className="bg-bg-secondary border border-border rounded-[10px] p-4">
+          <h2 className="text-sm font-semibold font-display text-text-primary mb-4">
+            Traffic concentration
+          </h2>
+          <TrafficTreemap
+            zones={data.perZone.map((z) => {
+              const zoneGroups = groups
+                .filter((g) => g.zoneIds.includes(z.zoneId))
+                .sort((a, b) => a.name.localeCompare(b.name));
+              const cluster = toClusters(zones).find((c) =>
+                c.zones.some((cz) => cz.id === z.zoneId),
+              );
+              return {
+                id: z.zoneId,
+                name: z.zoneName ?? z.zoneId,
+                requests: z.requests,
+                groupNames: zoneGroups.map((g) => g.name),
+                groupColors: zoneGroups.map((g) => g.color),
+                clusterName: cluster?.baseName,
+              };
+            })}
+            onZoneClick={onSelectZone}
+          />
+        </section>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <section className="bg-bg-secondary border border-border rounded-[10px] p-4">
+          <h2 className="text-sm font-semibold font-display text-text-primary mb-4">
+            Cache hit ratio vs Bandwidth
+          </h2>
+          <CacheHitScatter
+            zones={data.perZone.map((z) => ({
+              id: z.zoneId,
+              name: z.zoneName ?? z.zoneId,
+              bytes: z.bytes,
+              cacheHitRatio: computeCacheHitRatio(z.bytes, z.cachedBytes),
+            }))}
+            onZoneClick={onSelectZone}
+          />
+        </section>
+        {t.threats > 0 && (
+          <section className="bg-bg-secondary border border-border rounded-[10px] p-4">
+            <h2 className="text-sm font-semibold font-display text-text-primary mb-4">
+              Zones under attack
+            </h2>
+            <TopNBarChart
+              data={data.perZone
+                .filter((z) => z.threats > 0)
+                .map((z) => ({
+                  id: z.zoneId,
+                  label: z.zoneName ?? z.zoneId,
+                  value: z.threats,
+                }))}
+              accent="#f87171"
+              formatValue={formatCount}
+              n={10}
+              onItemClick={onSelectZone}
+              ariaLabel="Top zones by threats"
+            />
+          </section>
+        )}
+      </div>
+
+      <section className="bg-bg-secondary border border-border rounded-[10px] p-4">
+        <h2 className="text-sm font-semibold font-display text-text-primary mb-4">
+          Group totals
+        </h2>
+        <TopNBarChart
+          data={groupRollups.map((g) => ({
+            id: g.key,
+            label: g.name,
+            value: g.totals.requests,
+          }))}
+          accent="#f97316"
+          formatValue={formatCount}
+          n={10}
+          ariaLabel="Group totals by requests"
+        />
+        <p className="text-[10px] text-text-muted mt-1 font-mono">
+          * Group totals may double-count zones in multiple groups.
+        </p>
+      </section>
+
       {/* Per-group summaries */}
       <section>
         <h2 className="text-sm font-semibold font-display text-text-primary mb-3">
@@ -150,6 +325,7 @@ export function AccountOverview({
               <GroupSummaryCard
                 key={g.key}
                 entry={g}
+                series={perZoneSeriesByGroup[g.key] ?? []}
                 onClick={g.groupId ? () => onSelectGroup(g.groupId!) : undefined}
               />
             ))}
@@ -170,6 +346,7 @@ export function AccountOverview({
               <ClusterSummaryCard
                 key={c.name}
                 entry={c}
+                series={perZoneSeriesByCluster[c.name] ?? []}
                 onClick={() => onSelectCluster(c.name)}
               />
             ))}
@@ -226,10 +403,11 @@ interface GroupRollup {
 
 interface GroupSummaryCardProps {
   entry: GroupRollup;
+  series: ZoneTimeSeriesPoint[];
   onClick?: () => void;
 }
 
-function GroupSummaryCard({ entry, onClick }: GroupSummaryCardProps) {
+function GroupSummaryCard({ entry, series, onClick }: GroupSummaryCardProps) {
   const ungrouped = entry.groupId === null;
   return (
     <button
@@ -252,6 +430,9 @@ function GroupSummaryCard({ entry, onClick }: GroupSummaryCardProps) {
         <span className="text-[10px] font-mono text-text-muted bg-bg-tertiary border border-border rounded px-1.5 py-0.5">
           {entry.zoneCount} zone{entry.zoneCount !== 1 ? "s" : ""}
         </span>
+      </div>
+      <div className="mb-3">
+        <MetricSparkline series={series} metric="requests" height={28} />
       </div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
         <Stat label="Requests" value={formatCount(entry.totals.requests)} />
@@ -292,10 +473,11 @@ interface ClusterRollup {
 
 interface ClusterSummaryCardProps {
   entry: ClusterRollup;
+  series: ZoneTimeSeriesPoint[];
   onClick: () => void;
 }
 
-function ClusterSummaryCard({ entry, onClick }: ClusterSummaryCardProps) {
+function ClusterSummaryCard({ entry, series, onClick }: ClusterSummaryCardProps) {
   return (
     <button
       onClick={onClick}
@@ -308,6 +490,9 @@ function ClusterSummaryCard({ entry, onClick }: ClusterSummaryCardProps) {
         <span className="text-[10px] font-mono text-text-muted bg-bg-tertiary border border-border rounded px-1.5 py-0.5">
           {entry.tldCount} TLD{entry.tldCount !== 1 ? "s" : ""}
         </span>
+      </div>
+      <div className="mb-3">
+        <MetricSparkline series={series} metric="requests" height={28} />
       </div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
         <Stat label="Requests" value={formatCount(entry.totals.requests)} />
@@ -419,4 +604,28 @@ function aggregateByCluster(perZone: ZoneMetrics[], zones: Zone[]): ClusterRollu
   });
   rollups.sort((a, b) => b.totals.requests - a.totals.requests);
   return rollups;
+}
+
+function mergeSeries(seriesList: ZoneTimeSeriesPoint[][]): ZoneTimeSeriesPoint[] {
+  if (seriesList.length === 0) return [];
+  if (seriesList.length === 1) return seriesList[0];
+
+  const merged = new Map<string, ZoneTimeSeriesPoint>();
+  for (const series of seriesList) {
+    for (const point of series) {
+      const existing = merged.get(point.timestamp);
+      if (existing) {
+        merged.set(point.timestamp, {
+          timestamp: point.timestamp,
+          requests: (existing.requests ?? 0) + (point.requests ?? 0),
+          bytes: (existing.bytes ?? 0) + (point.bytes ?? 0),
+          cachedBytes: (existing.cachedBytes ?? 0) + (point.cachedBytes ?? 0),
+          threats: (existing.threats ?? 0) + (point.threats ?? 0),
+        });
+      } else {
+        merged.set(point.timestamp, { ...point });
+      }
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
