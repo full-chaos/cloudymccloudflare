@@ -2,12 +2,13 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings } from "../types/env";
 import { createDb } from "../db";
-import { analyticsQuerySchema } from "@shared/validators";
+import { analyticsDimensionQuerySchema, analyticsQuerySchema } from "@shared/validators";
 import { zValidatorQuery } from "../utils/zvalidator";
 import {
   getAccountAnalytics,
   getAnalyticsStatus,
   getClusterAnalytics,
+  getDimensionAggregate,
   getGroupAnalytics,
   getZoneAnalytics,
 } from "../services/analytics.service";
@@ -16,6 +17,52 @@ import { runAnalyticsBackfill } from "../services/analytics-backfill.service";
 const analytics = new Hono<{ Bindings: Bindings }>();
 
 const rangeQueryValidator = zValidatorQuery(analyticsQuerySchema);
+const dimensionQueryValidator = zValidatorQuery(analyticsDimensionQuerySchema);
+
+// ─── GET /api/analytics/account/dimensions?range=...&dim=... ────────────────
+
+analytics.get("/account/dimensions", dimensionQueryValidator, async (c) => {
+  const { range, dim } = c.req.valid("query");
+  const db = createDb(c.env.DB);
+  const result = await getDimensionAggregate(db, { kind: "account" }, dim, range);
+  return c.json({ success: true, result });
+});
+
+// ─── GET /api/analytics/group/:groupId/dimensions?range=...&dim=... ─────────
+
+analytics.get("/group/:groupId/dimensions", dimensionQueryValidator, async (c) => {
+  const { range, dim } = c.req.valid("query");
+  const { groupId } = c.req.param();
+  const db = createDb(c.env.DB);
+  const result = await getDimensionAggregate(db, { kind: "group", id: groupId }, dim, range);
+  if (!result) {
+    throw new HTTPException(404, { message: `Group ${groupId} not found` });
+  }
+  return c.json({ success: true, result });
+});
+
+// ─── GET /api/analytics/cluster/:name/dimensions?range=...&dim=... ───────────
+
+analytics.get("/cluster/:name/dimensions", dimensionQueryValidator, async (c) => {
+  const { range, dim } = c.req.valid("query");
+  const { name } = c.req.param();
+  const db = createDb(c.env.DB);
+  const result = await getDimensionAggregate(db, { kind: "cluster", id: name }, dim, range);
+  if (!result) {
+    throw new HTTPException(404, { message: `Cluster ${name} not found` });
+  }
+  return c.json({ success: true, result });
+});
+
+// ─── GET /api/analytics/zone/:zoneId/dimensions?range=...&dim=... ────────────
+
+analytics.get("/zone/:zoneId/dimensions", dimensionQueryValidator, async (c) => {
+  const { range, dim } = c.req.valid("query");
+  const { zoneId } = c.req.param();
+  const db = createDb(c.env.DB);
+  const result = await getDimensionAggregate(db, { kind: "zone", id: zoneId }, dim, range);
+  return c.json({ success: true, result });
+});
 
 // ─── GET /api/analytics/account?range=24h|7d|30d ─────────────────────────────
 
