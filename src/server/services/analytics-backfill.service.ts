@@ -12,6 +12,9 @@ const ZONE_CHUNK_SIZE = 10;
 /** Cloudflare GraphQL analytics rejects per-zone ranges wider than 3 days. */
 const MAX_GRAPHQL_WINDOW_HOURS = 24 * 3;
 
+/** firewallEventsAdaptive rejects ranges wider than 1 day. */
+const MAX_FIREWALL_WINDOW_HOURS = 24;
+
 /**
  * Cloudflare GraphQL also rejects requests whose oldest timestamp is more than
  * about ~3 days behind "now". Use a conservative 48h lookback for refreshes.
@@ -63,6 +66,24 @@ query ZoneBatch($zoneTags: [string!]!, $since: Time!, $until: Time!) {
   }
 }`;
 
+export const FIREWALL_EVENTS_QUERY = `
+query FirewallEvents($zoneTag: string!, $since: Time!, $until: Time!) {
+  viewer {
+    zones(filter: { zoneTag: $zoneTag }) {
+      zoneTag
+      firewallEventsAdaptive(
+        limit: 5000
+        filter: { datetime_geq: $since, datetime_leq: $until }
+      ) {
+        datetime
+        ruleId
+        source
+        action
+      }
+    }
+  }
+}`;
+
 interface ZoneBatchResponse {
   viewer: {
     zones: Array<{
@@ -80,6 +101,20 @@ interface ZoneBatchResponse {
           clientSSLMap: Array<{ clientSSLProtocol: string | null; requests: number }>;
         };
         avg: { sampleInterval: number };
+      }>;
+    }>;
+  };
+}
+
+export interface FirewallEventsResponse {
+  viewer: {
+    zones: Array<{
+      zoneTag: string;
+      firewallEventsAdaptive: Array<{
+        datetime: string;
+        ruleId: string | null;
+        source: string | null;
+        action: string | null;
       }>;
     }>;
   };
@@ -281,6 +316,28 @@ export function splitGraphQLWindows(
 ): Array<{ since: string; until: string }> {
   const windows: Array<{ since: string; until: string }> = [];
   const maxSpanMs = MAX_GRAPHQL_WINDOW_HOURS * 60 * 60 * 1000;
+
+  let cursor = new Date(since).getTime();
+  const end = new Date(until).getTime();
+
+  while (cursor <= end) {
+    const windowEnd = Math.min(cursor + maxSpanMs - 1, end);
+    windows.push({
+      since: new Date(cursor).toISOString(),
+      until: new Date(windowEnd).toISOString(),
+    });
+    cursor = windowEnd + 1;
+  }
+
+  return windows;
+}
+
+export function splitFirewallWindows(
+  since: string,
+  until: string,
+): Array<{ since: string; until: string }> {
+  const windows: Array<{ since: string; until: string }> = [];
+  const maxSpanMs = MAX_FIREWALL_WINDOW_HOURS * 60 * 60 * 1000;
 
   let cursor = new Date(since).getTime();
   const end = new Date(until).getTime();
