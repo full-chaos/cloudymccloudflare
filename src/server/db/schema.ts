@@ -150,6 +150,110 @@ export const analyticsZoneHourly = sqliteTable(
 export type AnalyticsZoneHourly = typeof analyticsZoneHourly.$inferSelect;
 export type NewAnalyticsZoneHourly = typeof analyticsZoneHourly.$inferInsert;
 
+// ─── Analytics dimensions (raw hourly buckets) ───────────────────────────────
+
+export const analyticsZoneCountryHourly = sqliteTable(
+  "analytics_zone_country_hourly",
+  {
+    zoneId: text("zone_id").notNull(),
+    hourBucket: text("hour_bucket").notNull(),
+    countryCode: text("country_code").notNull(),
+    requests: integer("requests").notNull().default(0),
+    fetchedAt: text("fetched_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.zoneId, t.hourBucket, t.countryCode] }),
+    zoneHourIdx: index("idx_country_zone_hour").on(t.zoneId, t.hourBucket),
+  }),
+);
+
+export type AnalyticsZoneCountryHourly = typeof analyticsZoneCountryHourly.$inferSelect;
+export type NewAnalyticsZoneCountryHourly = typeof analyticsZoneCountryHourly.$inferInsert;
+
+export const analyticsZoneStatusHourly = sqliteTable(
+  "analytics_zone_status_hourly",
+  {
+    zoneId: text("zone_id").notNull(),
+    hourBucket: text("hour_bucket").notNull(),
+    statusCode: integer("status_code").notNull(),
+    requests: integer("requests").notNull().default(0),
+    fetchedAt: text("fetched_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.zoneId, t.hourBucket, t.statusCode] }),
+    zoneHourIdx: index("idx_status_zone_hour").on(t.zoneId, t.hourBucket),
+  }),
+);
+
+export type AnalyticsZoneStatusHourly = typeof analyticsZoneStatusHourly.$inferSelect;
+export type NewAnalyticsZoneStatusHourly = typeof analyticsZoneStatusHourly.$inferInsert;
+
+export const analyticsZoneHttpVersionHourly = sqliteTable(
+  "analytics_zone_http_version_hourly",
+  {
+    zoneId: text("zone_id").notNull(),
+    hourBucket: text("hour_bucket").notNull(),
+    httpVersion: text("http_version").notNull(),
+    requests: integer("requests").notNull().default(0),
+    fetchedAt: text("fetched_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.zoneId, t.hourBucket, t.httpVersion] }),
+    zoneHourIdx: index("idx_http_version_zone_hour").on(t.zoneId, t.hourBucket),
+  }),
+);
+
+export type AnalyticsZoneHttpVersionHourly = typeof analyticsZoneHttpVersionHourly.$inferSelect;
+export type NewAnalyticsZoneHttpVersionHourly = typeof analyticsZoneHttpVersionHourly.$inferInsert;
+
+export const analyticsZoneSslVersionHourly = sqliteTable(
+  "analytics_zone_ssl_version_hourly",
+  {
+    zoneId: text("zone_id").notNull(),
+    hourBucket: text("hour_bucket").notNull(),
+    sslVersion: text("ssl_version").notNull(),
+    requests: integer("requests").notNull().default(0),
+    fetchedAt: text("fetched_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.zoneId, t.hourBucket, t.sslVersion] }),
+    zoneHourIdx: index("idx_ssl_version_zone_hour").on(t.zoneId, t.hourBucket),
+  }),
+);
+
+export type AnalyticsZoneSslVersionHourly = typeof analyticsZoneSslVersionHourly.$inferSelect;
+export type NewAnalyticsZoneSslVersionHourly = typeof analyticsZoneSslVersionHourly.$inferInsert;
+
+export const analyticsZoneFirewallHourly = sqliteTable(
+  "analytics_zone_firewall_hourly",
+  {
+    zoneId: text("zone_id").notNull(),
+    hourBucket: text("hour_bucket").notNull(),
+    ruleId: text("rule_id").notNull(),
+    source: text("source").notNull(),
+    action: text("action").notNull(),
+    events: integer("events").notNull().default(0),
+    fetchedAt: text("fetched_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.zoneId, t.hourBucket, t.ruleId, t.source, t.action] }),
+    zoneHourIdx: index("idx_firewall_zone_hour").on(t.zoneId, t.hourBucket),
+  }),
+);
+
+export type AnalyticsZoneFirewallHourly = typeof analyticsZoneFirewallHourly.$inferSelect;
+export type NewAnalyticsZoneFirewallHourly = typeof analyticsZoneFirewallHourly.$inferInsert;
+
 // ─── Analytics sync log ───────────────────────────────────────────────────────
 
 export const analyticsSyncLog = sqliteTable("analytics_sync_log", {
