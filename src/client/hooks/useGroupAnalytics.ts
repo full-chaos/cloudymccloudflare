@@ -25,7 +25,7 @@ export function useGroupAnalytics(
     try {
       setLoading(true);
       setError(null);
-      const result = await api.analytics.group(groupId, range);
+      const result = await api.analytics.group(groupId, range, { includePerZoneSeries: true });
       setData(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load group analytics");

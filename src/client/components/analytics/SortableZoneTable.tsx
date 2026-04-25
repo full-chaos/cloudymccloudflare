@@ -1,13 +1,17 @@
 import { useMemo, useState } from "react";
-import type { ZoneMetrics } from "../../types";
+import type { ZoneMetrics, ZoneTimeSeriesPoint } from "../../types";
 import { formatBytes, formatCount, formatPercent } from "../../lib/format";
+import { MetricSparkline } from "./MetricSparkline";
 
 type SortKey = "zoneName" | "requests" | "bytes" | "cachedBytes" | "threats" | "cacheHitRatio";
 type SortDir = "asc" | "desc";
+type SparklineMetric = "requests" | "bytes" | "cachedBytes" | "threats";
 
 interface SortableZoneTableProps {
   rows: ZoneMetrics[];
   onRowClick?: (zoneId: string) => void;
+  seriesByZoneId?: Record<string, ZoneTimeSeriesPoint[]>;
+  sparklineMetric?: SparklineMetric;
 }
 
 function cacheHitRatio(row: ZoneMetrics): number {
@@ -16,9 +20,16 @@ function cacheHitRatio(row: ZoneMetrics): number {
   return r < 0 ? 0 : r > 1 ? 1 : r;
 }
 
-export function SortableZoneTable({ rows, onRowClick }: SortableZoneTableProps) {
+export function SortableZoneTable({
+  rows,
+  onRowClick,
+  seriesByZoneId,
+  sparklineMetric = "requests",
+}: SortableZoneTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("requests");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const showSparkline = !!seriesByZoneId && Object.keys(seriesByZoneId).length > 0;
+  const columnCount = showSparkline ? 7 : 6;
 
   const sorted = useMemo(() => {
     const list = [...rows];
@@ -55,12 +66,15 @@ export function SortableZoneTable({ rows, onRowClick }: SortableZoneTableProps) 
             <SortHeader label="Cached" k="cachedBytes" sortKey={sortKey} sortDir={sortDir} onSort={onSort} right />
             <SortHeader label="Hit ratio" k="cacheHitRatio" sortKey={sortKey} sortDir={sortDir} onSort={onSort} right />
             <SortHeader label="Threats" k="threats" sortKey={sortKey} sortDir={sortDir} onSort={onSort} right />
+            {showSparkline && (
+              <th className="px-3 py-2 font-medium text-right text-text-secondary w-[100px]">Trend</th>
+            )}
           </tr>
         </thead>
         <tbody>
           {sorted.length === 0 ? (
             <tr>
-              <td colSpan={6} className="text-center text-text-muted py-8 text-xs">
+              <td colSpan={columnCount} className="text-center text-text-muted py-8 text-xs">
                 No zones to display.
               </td>
             </tr>
@@ -95,6 +109,15 @@ export function SortableZoneTable({ rows, onRowClick }: SortableZoneTableProps) 
                     <span className="text-text-muted">0</span>
                   )}
                 </td>
+                {showSparkline && (
+                  <td className="px-3 py-2 w-[100px]">
+                    <MetricSparkline
+                      series={seriesByZoneId?.[row.zoneId] ?? []}
+                      metric={sparklineMetric}
+                      height={24}
+                    />
+                  </td>
+                )}
               </tr>
             ))
           )}
