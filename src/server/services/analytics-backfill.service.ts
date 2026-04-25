@@ -527,10 +527,46 @@ async function computeWindow(
     .orderBy(desc(analyticsSyncLog.finishedAt))
     .limit(1);
 
-  return resolveBackfillWindow(
+  const window = resolveBackfillWindow(
     now,
     lastSuccess[0]?.finishedAt ?? null,
   );
+  const dimensionBootstrapSince = await getDimensionBootstrapSince(db, now);
+
+  if (dimensionBootstrapSince && Date.parse(dimensionBootstrapSince) < Date.parse(window.since)) {
+    return { since: dimensionBootstrapSince, until: window.until };
+  }
+
+  return window;
+}
+
+async function getDimensionBootstrapSince(
+  db: ReturnType<typeof createDb>,
+  now: Date,
+): Promise<string | null> {
+  const safeSince = new Date(now);
+  safeSince.setHours(safeSince.getHours() - MAX_GRAPHQL_LOOKBACK_HOURS);
+  const safeSinceIso = safeSince.toISOString();
+
+  const [country] = await db
+    .select({ oldest: sql<string | null>`MIN(${analyticsZoneCountryHourly.hourBucket})` })
+    .from(analyticsZoneCountryHourly);
+  const [status] = await db
+    .select({ oldest: sql<string | null>`MIN(${analyticsZoneStatusHourly.hourBucket})` })
+    .from(analyticsZoneStatusHourly);
+  const [http] = await db
+    .select({ oldest: sql<string | null>`MIN(${analyticsZoneHttpVersionHourly.hourBucket})` })
+    .from(analyticsZoneHttpVersionHourly);
+  const [ssl] = await db
+    .select({ oldest: sql<string | null>`MIN(${analyticsZoneSslVersionHourly.hourBucket})` })
+    .from(analyticsZoneSslVersionHourly);
+
+  const oldestBuckets = [country?.oldest, status?.oldest, http?.oldest, ssl?.oldest];
+  for (const bucket of oldestBuckets) {
+    if (!bucket || Date.parse(bucket) > Date.parse(safeSinceIso)) return safeSinceIso;
+  }
+
+  return null;
 }
 
 export function resolveBackfillWindow(
