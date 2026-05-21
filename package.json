@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.18",
+    "hono": "^4.12.21",
     "jose": "^6.2.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
@@ -33,21 +33,21 @@
     "esbuild": "^0.28.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.36.4",
+    "@cloudflare/vite-plugin": "^1.37.3",
     "@cloudflare/workers-types": "^4.20260423.1",
     "@tailwindcss/postcss": "^4.3.0",
-    "@types/node": "^25.7.0",
-    "@types/react": "^19.2.14",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
-    "@vitest/coverage-v8": "^4.1.6",
+    "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/coverage-v8": "^4.1.7",
     "autoprefixer": "^10.5.0",
     "drizzle-kit": "^0.31.10",
     "esbuild": "^0.28.0",
-    "postcss": "^8.5.14",
+    "postcss": "^8.5.15",
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
-    "vite": "^8.0.12",
+    "vite": "^8.0.14",
     "vitest": "^4.1.5",
     "wrangler": "^4.84.1"
   }
