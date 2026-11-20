@@ -214,8 +214,8 @@ export const api = {
       return get<CustomRule[]>(`/security/${zoneId}/rules`);
     },
 
-    deleteRule(zoneId: string, ruleId: string): Promise<void> {
-      return del<void>(`/security/${zoneId}/rules/${ruleId}`);
+    deleteRule(zoneId: string, ruleId: string): Promise<{ deleted: boolean }> {
+      return del<{ deleted: boolean }>(`/security/${zoneId}/rules/${ruleId}`);
     },
 
     getDeploymentLog(): Promise<DeploymentLogEntry[]> {

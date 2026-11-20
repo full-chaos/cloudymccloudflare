@@ -21,7 +21,11 @@ import path from "node:path";
 seedRemoteProxyAuthFromDevVars();
 
 function seedRemoteProxyAuthFromDevVars() {
-  if (!process.env.CLOUDFLARE_API_TOKEN) {
+  // `USE_WRANGLER_LOGIN=1 npm run dev` keeps the token out so wrangler falls back
+  // to the `wrangler login` OAuth session (needed for the Workers AI binding when
+  // the .dev.vars token lacks Workers Scripts / Workers AI scopes).
+  const useWranglerLogin = process.env.USE_WRANGLER_LOGIN === "1";
+  if (!process.env.CLOUDFLARE_API_TOKEN && !useWranglerLogin) {
     const devVarsPath = path.resolve(__dirname, ".dev.vars");
     if (existsSync(devVarsPath)) {
       const vars: Record<string, string> = {};

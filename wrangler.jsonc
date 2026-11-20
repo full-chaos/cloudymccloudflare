@@ -2,6 +2,8 @@
   "name": "cloudymccloudflare",
   "main": "src/server/index.ts",
   "compatibility_date": "2025-02-01",
+  // The Agents SDK needs Node.js APIs (AsyncLocalStorage, etc.).
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./dist/client",
     "not_found_handling": "single-page-application",
@@ -22,6 +24,17 @@
       "remote": false,
     },
   ],
+  // Workers AI runs Llama 3.3 for the ZoneAgent chat. It always runs on
+  // Cloudflare, even in `npm run dev`, so local dev needs `wrangler login`.
+  "ai": {
+    "binding": "AI",
+  },
+  // One ZoneAgent Durable Object per Cloudflare Access identity. Chat history
+  // lives in each object's built-in SQLite storage.
+  "durable_objects": {
+    "bindings": [{ "name": "ZoneAgent", "class_name": "ZoneAgent" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ZoneAgent"] }],
   "vars": {
     "ENVIRONMENT": "production",
     "CF_ACCOUNT_ID": "f39dbcd4130fd731be7f0f77bf013e01",

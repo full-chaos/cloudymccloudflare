@@ -1,5 +1,42 @@
 # CloudlyMcCloudFlare — Current Repo Review
 
+## Status (checked 2026-11-20)
+
+PR #16 "Remediate repo review findings" (2e31cb3, merged 2026-04-24) fixed most items. The review body below is the original 2026-04-23 text and is kept for history.
+
+`CODEBASE_REVIEW.md` (superseded by this review) is not tracked in git and has no history, so it has no status section.
+
+### Highest priority
+
+1. Security API contracts out of sync: **fixed** in PR #16 (`src/server/routes/security.ts` GET/POST/PUT return `ruleset.rules` arrays and use `replaceWAFRulesSchema`; deploy returns `DeploymentLogEntry[]`). Remaining client `deleteRule` return type fixed in 95abd03; contract tests in `tests/integration/security-contract.test.ts`.
+2. Hostname-based auth bypass: **fixed** in PR #16 (`src/server/middleware/auth.ts:6-8,36-38` requires `ENVIRONMENT !== "production"` and `ENABLE_DEV_AUTH_BYPASS === "true"`).
+3. Security deploy errors swallowed: **fixed** in PR #16 (`useSecurityRules.ts`, `SecurityView.tsx`).
+4. DNS batch mode UI-only: **fixed** in PR #16 (`DNSView.tsx:44,63-66` uses batch path with group zones).
+5. Template deploy handoff: **fixed** in PR #16 (`App.tsx:200` passes `initialTemplateKey`; `SecurityView.tsx:58-61` syncs it).
+
+### Medium priority
+
+- DNS fetch race: **fixed** (`useDNSRecords.ts:85-102` latest-request guard).
+- Error message leak: **fixed** (`errorHandler.ts:21` production masking).
+- Rate limiting: **fixed** (`src/server/middleware/rateLimit.ts`, `src/server/index.ts:37`). Concurrency guards beyond the rate limit are open.
+- Analytics backfill overlap: **fixed** (D1 lease, `migrations/0003_analytics_locks.sql`, `analytics-backfill.service.ts`).
+- DNS batch return type: **fixed** (`api.dns.batch` returns `ZoneBatchResult[]`, `api.ts:155-160`).
+- Templates list shape: **fixed** (`api.templates.list` returns `RuleTemplate[]`).
+- Group deploy target ids: **fixed** (`deployTargetSchema` discriminated union, `validators.ts:140-149`).
+- Group optimistic create rollback: **fixed** in PR #16 (`useGroups.ts`).
+
+### Refactoring and quality
+
+- Drizzle index/constraint mirror: **fixed** (`schema.ts:46-48`).
+- Batch zone-cache writes: **fixed** (single bulk upsert, `zones.ts:153-175`).
+- Route param/query validation: **partly fixed** (security, DNS, deployment `limit` validated). Still open for `zones.ts`, `groups.ts`, `templates.ts`, and `security.ts` ip-rules routes, which use `c.req.param()`. Note `nonEmptyId` is only `min(1)`, so extra validation adds little until stricter ID formats are defined.
+- Surface hook errors in views: **partly fixed** (`App.tsx:162,178,186` pass errors and retry to Groups/DNS views). Open for zones and security views.
+- Accessibility: **open** (`SortableZoneTable.tsx:159-160` clickable `th`; Modal focus trap not audited).
+- Duplicate deployment/template types: **open** (`DeployLogEntry` in `src/client/types/index.ts:43` still duplicates `DeploymentLogEntry`).
+
+---
+
+
 > Generated: 2026-04-23  
 > Scope: security, quality, speed optimizations, enhancements, and refactoring opportunities  
 > Verification baseline: `npm run typecheck` passes; `npm test -- --run` passes with 12 files / 104 tests.

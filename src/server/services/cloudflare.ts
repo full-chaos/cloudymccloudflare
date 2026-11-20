@@ -320,11 +320,12 @@ export class CloudflareClient {
         };
       }
 
-      // Fetch the full ruleset with all rules
-      return this.request<CFRuleset>(
+      // Fetch the full ruleset with all rules. Cloudflare omits `rules` when the ruleset is empty.
+      const ruleset = await this.request<CFRuleset>(
         "GET",
         `/zones/${zoneId}/rulesets/${customRuleset.id}`
       );
+      return { ...ruleset, rules: ruleset.rules ?? [] };
     } catch (err) {
       if (err instanceof CloudflareApiError && err.statusCode === 404) {
         return {
