@@ -4,11 +4,11 @@ import path from "path";
 export default defineConfig({
   resolve: {
     alias: {
-      "@shared": path.resolve(__dirname, "src/shared"),
-      "@server": path.resolve(__dirname, "src/server"),
-      "@client": path.resolve(__dirname, "src/client"),
-      "cloudflare:workers": path.resolve(__dirname, "tests/helpers/cloudflare-workers-stub.ts"),
-      "cloudflare:email": path.resolve(__dirname, "tests/helpers/cloudflare-workers-stub.ts"),
+      "@shared": path.resolve(import.meta.dirname, "src/shared"),
+      "@server": path.resolve(import.meta.dirname, "src/server"),
+      "@client": path.resolve(import.meta.dirname, "src/client"),
+      "cloudflare:workers": path.resolve(import.meta.dirname, "tests/helpers/cloudflare-workers-stub.ts"),
+      "cloudflare:email": path.resolve(import.meta.dirname, "tests/helpers/cloudflare-workers-stub.ts"),
     },
   },
   test: {
