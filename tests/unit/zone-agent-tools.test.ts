@@ -22,7 +22,8 @@ import {
   getGroupAnalytics,
   getZoneAnalytics,
 } from "@server/services/analytics.service";
-import { createZoneTools } from "@server/agent/tools";
+import { createZoneTools, createdRecordKeysSinceLastUserMessage, dnsRecordKey } from "@server/agent/tools";
+import type { UIMessage } from "ai";
 
 const zones = [
   { id: "z1", name: "example.com" },
@@ -181,7 +182,7 @@ describe("get_traffic_analytics", () => {
 
   it("account scope", async () => {
     vi.mocked(getAccountAnalytics).mockResolvedValue({
-      totals: { requests: 40 }, perZone, lastFetchedAt: "t",
+      totals: { requests: 40, cacheHitRatio: 0.22267103515 }, perZone, lastFetchedAt: "t",
     } as never);
     const res = await run("get_traffic_analytics", { scope: "account" });
     expect(getAccountAnalytics).toHaveBeenCalledWith(expect.anything(), "7d");
@@ -189,13 +190,13 @@ describe("get_traffic_analytics", () => {
       { zone: "z2", requests: 30, threats: 2 },
       { zone: "example.com", requests: 10, threats: 1 },
     ]);
-    expect(res.totals).toEqual({ requests: 40 });
+    expect(res.totals).toEqual({ requests: 40, cacheHitRatio: 0.223 });
   });
 
   it("group scope", async () => {
     vi.mocked(listGroups).mockResolvedValue([group()]);
     vi.mocked(getGroupAnalytics).mockResolvedValue({
-      groupName: "Prod", totals: { requests: 1 }, perZone, lastFetchedAt: "t",
+      groupName: "Prod", totals: { requests: 1, cacheHitRatio: 0 }, perZone, lastFetchedAt: "t",
     } as never);
     const res = await run("get_traffic_analytics", { scope: "group", name: "Prod", range: "24h" });
     expect(getGroupAnalytics).toHaveBeenCalledWith(expect.anything(), "g1", "24h");
@@ -203,7 +204,7 @@ describe("get_traffic_analytics", () => {
   });
 
   it("zone scope", async () => {
-    vi.mocked(getZoneAnalytics).mockResolvedValue({ totals: { requests: 5 }, lastFetchedAt: "t" } as never);
+    vi.mocked(getZoneAnalytics).mockResolvedValue({ totals: { requests: 5, cacheHitRatio: 0.5 }, lastFetchedAt: "t" } as never);
     const res = await run("get_traffic_analytics", { scope: "zone", name: "example.com", range: "30d" });
     expect(getZoneAnalytics).toHaveBeenCalledWith(expect.anything(), "z1", "30d");
     expect(res).toMatchObject({ zone: "example.com", range: "30d", totals: { requests: 5 } });
@@ -247,8 +248,32 @@ describe("get_top_error_zones", () => {
 });
 
 describe("create_dns_record", () => {
-  it("requires approval", () => {
-    expect((tools.create_dns_record as unknown as { needsApproval?: boolean }).needsApproval).toBe(true);
+  it("requires approval for a record not yet created", async () => {
+    const needsApproval = (tools.create_dns_record as unknown as {
+      needsApproval: (i: unknown) => boolean | Promise<boolean>;
+    }).needsApproval;
+    expect(await needsApproval({ zone: "example.com", type: "A", name: "fresh", content: "1.1.1.1" })).toBe(true);
+  });
+
+  it("skips a repeated create in the same request without approval or API call", async () => {
+    const created = new Set<string>();
+    const local = createZoneTools(
+      { db: {} as Database, cf: {} as CloudflareClient, listZones: async () => [{ id: "z1", name: "example.com" }] },
+      created,
+    );
+    const t = local.create_dns_record as unknown as {
+      needsApproval: (i: unknown) => boolean | Promise<boolean>;
+      execute: (i: unknown, o: unknown) => Promise<AnyResult>;
+    };
+    const input = { zone: "example.com", type: "TXT", name: "agent-test", content: "hello" };
+    vi.mocked(createRecord).mockResolvedValue({ id: "r9", type: "TXT", name: "agent-test.example.com", content: "hello" } as never);
+
+    expect(await t.needsApproval(input)).toBe(true);
+    expect((await t.execute(input, { toolCallId: "a", messages: [] })).created).toBeDefined();
+    expect(await t.needsApproval({ ...input, zone: "EXAMPLE.com" })).toBe(false);
+    const again = await t.execute(input, { toolCallId: "b", messages: [] });
+    expect(again.alreadyCreated).toBe(true);
+    expect(createRecord).toHaveBeenCalledTimes(1);
   });
 
   it("creates with resolved zone id", async () => {
@@ -311,5 +336,33 @@ describe("input schemas tolerate Llama's stringly-typed arguments", () => {
     expect(() =>
       schema.parse({ zone: "example.com", type: "TXT", name: "t", content: "x", ttl: "soon" }),
     ).toThrow();
+  });
+});
+
+describe("createdRecordKeysSinceLastUserMessage", () => {
+  const createdPart = (content: string) => ({
+    type: "tool-create_dns_record",
+    toolCallId: content,
+    state: "output-available",
+    input: { zone: "example.com", type: "TXT", name: "t", content },
+    output: { zone: "example.com", created: { id: "r" } },
+  });
+
+  it("collects successful creates after the last user message only", () => {
+    const messages = [
+      { id: "1", role: "user", parts: [{ type: "text", text: "first" }] },
+      { id: "2", role: "assistant", parts: [createdPart("old")] },
+      { id: "3", role: "user", parts: [{ type: "text", text: "second" }] },
+      {
+        id: "4",
+        role: "assistant",
+        parts: [
+          createdPart("new"),
+          { ...createdPart("failed"), output: { error: "x" } },
+        ],
+      },
+    ] as unknown as UIMessage[];
+    const keys = createdRecordKeysSinceLastUserMessage(messages);
+    expect([...keys]).toEqual([dnsRecordKey({ zone: "example.com", type: "TXT", name: "t", content: "new" })]);
   });
 });

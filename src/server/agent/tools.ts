@@ -1,4 +1,4 @@
-import { tool } from "ai";
+import { tool, type UIMessage } from "ai";
 import { z } from "zod";
 import type { Database } from "../db";
 import { createDb, zoneCache } from "../db";
@@ -14,7 +14,7 @@ import {
 } from "../services/analytics.service";
 import { DNS_RECORD_TYPES } from "@shared/constants";
 import { createDNSRecordSchema } from "@shared/validators";
-import type { AnalyticsRange, Group } from "@shared/types";
+import type { AccountTotals, AnalyticsRange, Group } from "@shared/types";
 import type { Bindings } from "../types/env";
 
 // Llama 3.3 has a 24k-token context window, so every tool trims its output.
@@ -105,7 +105,34 @@ function rangeOrDefault(range: AnalyticsRange | undefined): AnalyticsRange {
   return range ?? "7d";
 }
 
-export function createZoneTools(deps: ToolDeps) {
+type DnsRecordRef = { zone: string; type: string; name: string; content: string };
+
+export function dnsRecordKey(r: DnsRecordRef): string {
+  return [r.zone, r.type, r.name, r.content].map((v) => v.trim().toLowerCase()).join("|");
+}
+
+// Llama 3.3 sometimes repeats a successful create_dns_record in a later step. Records already
+// created since the user's last message are skipped without a second approval or API call.
+export function createdRecordKeysSinceLastUserMessage(messages: UIMessage[]): Set<string> {
+  const keys = new Set<string>();
+  const lastUser = messages.map((m) => m.role).lastIndexOf("user");
+  for (const message of messages.slice(lastUser + 1)) {
+    for (const part of message.parts) {
+      if (part.type !== "tool-create_dns_record" || part.state !== "output-available") continue;
+      const output = part.output as { created?: unknown } | null;
+      if (output && typeof output === "object" && output.created) {
+        keys.add(dnsRecordKey(part.input as DnsRecordRef));
+      }
+    }
+  }
+  return keys;
+}
+
+function roundTotals(totals: AccountTotals): AccountTotals {
+  return { ...totals, cacheHitRatio: Number(totals.cacheHitRatio.toFixed(3)) };
+}
+
+export function createZoneTools(deps: ToolDeps, createdRecordKeys: Set<string> = new Set()) {
   return {
     list_zones: tool({
       description: "List all Cloudflare zones (domains) in this account.",
@@ -237,7 +264,7 @@ export function createZoneTools(deps: ToolDeps) {
             return {
               scope,
               range: r,
-              totals: a.totals,
+              totals: roundTotals(a.totals),
               topZonesByRequests: topByRequests(a.perZone),
               lastFetchedAt: a.lastFetchedAt,
             };
@@ -251,14 +278,14 @@ export function createZoneTools(deps: ToolDeps) {
               scope,
               range: r,
               group: g.groupName,
-              totals: g.totals,
+              totals: roundTotals(g.totals),
               topZonesByRequests: topByRequests(g.perZone),
               lastFetchedAt: g.lastFetchedAt,
             };
           }
           const zone = await resolveZone(deps, name);
           const z = await getZoneAnalytics(deps.db, zone.id, r);
-          return { scope, range: r, zone: zone.name, totals: z.totals, lastFetchedAt: z.lastFetchedAt };
+          return { scope, range: r, zone: zone.name, totals: roundTotals(z.totals), lastFetchedAt: z.lastFetchedAt };
         }),
     }),
 
@@ -298,7 +325,7 @@ export function createZoneTools(deps: ToolDeps) {
 
     create_dns_record: tool({
       description:
-        "Create one DNS record in a zone. The user must approve this in the UI before it runs.",
+        "Create one NEW DNS record in a zone. The user must approve this in the UI. Never use it to delete, update or replace a record.",
       inputSchema: z.object({
         zone: z.string().describe("Zone name (example.com) or zone id."),
         type: z.enum(DNS_RECORD_TYPES),
@@ -308,15 +335,20 @@ export function createZoneTools(deps: ToolDeps) {
         ttl: looseInt.optional().describe("Seconds. 1 means automatic."),
         priority: looseInt.optional().describe("Required for MX records."),
       }),
-      needsApproval: true,
+      needsApproval: (input) => !createdRecordKeys.has(dnsRecordKey(input)),
       execute: ({ zone, ...record }) =>
         safely("create_dns_record", async () => {
+          const key = dnsRecordKey({ zone, ...record });
+          if (createdRecordKeys.has(key)) {
+            return { zone, alreadyCreated: true, note: "This record was already created for this request. Nothing changed." };
+          }
           const parsed = createDNSRecordSchema.safeParse(record);
           if (!parsed.success) {
             throw new Error(parsed.error.issues.map((i) => i.message).join("; "));
           }
           const ref = await resolveZone(deps, zone);
           const created = await createRecord(deps.cf, ref.id, parsed.data);
+          createdRecordKeys.add(key);
           return {
             zone: ref.name,
             created: { id: created.id, type: created.type, name: created.name, content: created.content },

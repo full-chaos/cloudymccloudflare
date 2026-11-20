@@ -2,7 +2,7 @@ import { AIChatAgent, type OnChatMessageOptions } from "@cloudflare/ai-chat";
 import { createWorkersAI } from "workers-ai-provider";
 import { convertToModelMessages, isStepCount, pruneMessages, streamText } from "ai";
 import type { Bindings } from "../types/env";
-import { createToolDeps, createZoneTools } from "./tools";
+import { createdRecordKeysSinceLastUserMessage, createToolDeps, createZoneTools } from "./tools";
 import { withStreamDedupe } from "./ai-binding";
 
 export const ZONE_AGENT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
@@ -18,7 +18,9 @@ Rules:
 - Use exact zone and group names from list_zones or list_groups.
 - "This week" means range "7d". "Today" means range "24h".
 - If a tool returns an error, tell the user what failed in one sentence.
-- To change anything, use create_dns_record. The user must approve it. Never claim a change was made unless the tool result confirms it.
+- The only change you can make is creating a new DNS record with create_dns_record. The user must approve it. Never claim a change was made unless the tool result confirms it.
+- You cannot delete, update or rename DNS records, and you cannot change WAF rules. If the user asks for that, say so in one sentence and tell them to use the DNS Records or Security Rules page. Never call create_dns_record for those requests.
+- Call create_dns_record at most once per record. When it returns "created", tell the user the record was created and stop.
 - Keep answers short and in plain text. For many items, write one line per item starting with "- ". Do not use Markdown tables, headings or bold.`;
 
 export class ZoneAgent extends AIChatAgent<Bindings> {
@@ -29,7 +31,10 @@ export class ZoneAgent extends AIChatAgent<Bindings> {
 
   async onChatMessage(_onFinish: unknown, options?: OnChatMessageOptions): Promise<Response> {
     const workersai = createWorkersAI({ binding: withStreamDedupe(this.env.AI) });
-    const tools = createZoneTools(createToolDeps(this.env));
+    const tools = createZoneTools(
+      createToolDeps(this.env),
+      createdRecordKeysSinceLastUserMessage(this.messages),
+    );
 
     const recent = this.messages.slice(-MAX_CONTEXT_MESSAGES);
     const result = streamText({
