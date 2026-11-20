@@ -3,6 +3,7 @@ import { createWorkersAI } from "workers-ai-provider";
 import { convertToModelMessages, isStepCount, pruneMessages, streamText } from "ai";
 import type { Bindings } from "../types/env";
 import { createToolDeps, createZoneTools } from "./tools";
+import { withStreamDedupe } from "./ai-binding";
 
 export const ZONE_AGENT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
@@ -18,7 +19,7 @@ Rules:
 - "This week" means range "7d". "Today" means range "24h".
 - If a tool returns an error, tell the user what failed in one sentence.
 - To change anything, use create_dns_record. The user must approve it. Never claim a change was made unless the tool result confirms it.
-- Keep answers short. Use a list or a small table for many items.`;
+- Keep answers short and in plain text. For many items, write one line per item starting with "- ". Do not use Markdown tables, headings or bold.`;
 
 export class ZoneAgent extends AIChatAgent<Bindings> {
   // Instance names are derived from the user's identity; do not echo them to the browser.
@@ -27,7 +28,7 @@ export class ZoneAgent extends AIChatAgent<Bindings> {
   maxPersistedMessages = 200;
 
   async onChatMessage(_onFinish: unknown, options?: OnChatMessageOptions): Promise<Response> {
-    const workersai = createWorkersAI({ binding: this.env.AI });
+    const workersai = createWorkersAI({ binding: withStreamDedupe(this.env.AI) });
     const tools = createZoneTools(createToolDeps(this.env));
 
     const recent = this.messages.slice(-MAX_CONTEXT_MESSAGES);
@@ -39,6 +40,8 @@ export class ZoneAgent extends AIChatAgent<Bindings> {
         toolCalls: "before-last-2-messages",
       }),
       tools,
+      // Workers AI defaults to 256 output tokens, which truncates DNS listings.
+      maxOutputTokens: 1024,
       stopWhen: isStepCount(6),
       abortSignal: options?.abortSignal,
     });
