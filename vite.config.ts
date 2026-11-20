@@ -26,7 +26,7 @@ function seedRemoteProxyAuthFromDevVars() {
   // the .dev.vars token lacks Workers Scripts / Workers AI scopes).
   const useWranglerLogin = process.env.USE_WRANGLER_LOGIN === "1";
   if (!process.env.CLOUDFLARE_API_TOKEN && !useWranglerLogin) {
-    const devVarsPath = path.resolve(__dirname, ".dev.vars");
+    const devVarsPath = path.resolve(import.meta.dirname, ".dev.vars");
     if (existsSync(devVarsPath)) {
       const vars: Record<string, string> = {};
       for (const line of readFileSync(devVarsPath, "utf8").split("\n")) {
@@ -43,7 +43,7 @@ function seedRemoteProxyAuthFromDevVars() {
     }
   }
   if (!process.env.CLOUDFLARE_ACCOUNT_ID) {
-    const wranglerPath = path.resolve(__dirname, "wrangler.jsonc");
+    const wranglerPath = path.resolve(import.meta.dirname, "wrangler.jsonc");
     if (existsSync(wranglerPath)) {
       const m = readFileSync(wranglerPath, "utf8").match(
         /"CF_ACCOUNT_ID"\s*:\s*"([^"]+)"/,
@@ -58,17 +58,17 @@ export default defineConfig({
   plugins: [
     react(),
     cloudflare({
-      configPath: path.resolve(__dirname, "wrangler.jsonc"),
+      configPath: path.resolve(import.meta.dirname, "wrangler.jsonc"),
       persistState: {
-        path: path.resolve(__dirname, ".wrangler/state"),
+        path: path.resolve(import.meta.dirname, ".wrangler/state"),
       },
     }),
   ],
   resolve: {
     alias: {
-      "@shared": path.resolve(__dirname, "src/shared"),
-      "@server": path.resolve(__dirname, "src/server"),
-      "@client": path.resolve(__dirname, "src/client"),
+      "@shared": path.resolve(import.meta.dirname, "src/shared"),
+      "@server": path.resolve(import.meta.dirname, "src/server"),
+      "@client": path.resolve(import.meta.dirname, "src/client"),
     },
   },
   server: {
@@ -83,7 +83,7 @@ export default defineConfig({
     // With the old `dist/client/` we got `dist/client/client/…` nested one
     // level too deep, and wrangler uploaded the worker bundle (including a
     // copy of .dev.vars) as static assets.
-    outDir: path.resolve(__dirname, "dist"),
+    outDir: path.resolve(import.meta.dirname, "dist"),
     emptyOutDir: true,
   },
 });
