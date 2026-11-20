@@ -56,3 +56,11 @@ Commit in small, logical commits. Push the branch and open a **draft** PR that s
 ````
 
 **Produced:** branch `feat/ai-zone-agent` with the `ZoneAgent` chat agent (server + UI), tests, reviewer docs, and a draft PR.
+
+## 2
+
+```text
+done.
+```
+
+**Produced:** used the dev server started in my own terminal (`USE_WRANGLER_LOGIN=1 npm run dev`) to run the three questions live. That run found and fixed doubled stream tokens from Workers AI, a 256-token answer cutoff, string-typed tool arguments from Llama, and a crash on zones with an empty WAF ruleset. Then it added the transcripts to the PR.

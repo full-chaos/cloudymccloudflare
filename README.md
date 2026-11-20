@@ -35,7 +35,8 @@ flowchart LR
 
 - **One agent per user.** `/api/agent` and `/api/agent/*` sit behind the same `authMiddleware` as the rest of `/api/*`. The middleware records the verified identity (Access JWT `email`, or `sub`). The Worker hashes it and calls `getAgentByName`. The browser cannot pick the instance name. Requests without valid auth get a 401 before they reach a Durable Object.
 - **Tools** ([`tools.ts`](src/server/agent/tools.ts)) wrap the existing services and do not reimplement them. Read-only tools: `list_zones`, `list_groups`, `get_dns_records`, `get_waf_rules` (zone or group), `get_deployment_log`, `get_traffic_analytics`, `get_top_error_zones`. Mutating tool: `create_dns_record`, gated by the SDK's `needsApproval` human-in-the-loop step. Other mutations (DNS update/delete, WAF deploy) are left out on purpose.
-- **Llama-friendly.** Tool schemas are small and flat. Outputs are trimmed to fit the 24k-token context window. A failing tool returns `{ error }` that the model can explain; it does not throw.
+- **Llama-friendly.** Tool schemas are small and flat, and accept booleans and numbers sent as strings (Llama 3.3 often sends `"false"` or `"3600"`). Outputs are trimmed to fit the 24k-token context window, and answers are capped at 1024 output tokens (the Workers AI default of 256 cut off DNS listings). A failing tool returns `{ error }` that the model can explain; it does not throw.
+- **Stream fix.** Workers AI sends each Llama 3.3 stream token twice in one SSE event: once in the native `response`/`tool_calls` fields and once in OpenAI-style `choices[0].delta`. `workers-ai-provider` reads both, which doubles text and breaks tool-call JSON. [`ai-binding.ts`](src/server/agent/ai-binding.ts) wraps the `AI` binding and keeps only the `choices` copy.
 
 ### Run it locally
 
