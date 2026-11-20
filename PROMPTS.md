@@ -118,3 +118,11 @@ I admin merged.
 ```
 
 **Produced:** synced local `main` with the merged PR #52, removed the local coverage output, and opened this follow-up PR to record the prompt.
+
+## 9
+
+```text
+Deploy to D1 failed though, https://github.com/full-chaos/cloudymccloudflare/actions/runs/44775811699/job/136425254402
+```
+
+**Produced:** found that Wrangler 4.90.1 (from Dependabot PR #34) requires Node.js 22 while the workflows used Node 20; Deploy had failed since 2026-05-14. Switched the CI and Deploy workflows to Node 22 and updated the README prerequisite.
