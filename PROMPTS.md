@@ -64,3 +64,13 @@ done.
 ```
 
 **Produced:** used the dev server started in my own terminal (`USE_WRANGLER_LOGIN=1 npm run dev`) to run the three questions live. That run found and fixed doubled stream tokens from Workers AI, a 256-token answer cutoff, string-typed tool arguments from Llama, and a crash on zones with an empty WAF ruleset. Then it added the transcripts to the PR.
+
+## 3
+
+```text
+that's fine. But also I am seeing Error: internal error; reference = 5e94t3d4fik1j4u1v6kk751h 
+
+So I assume that's the erro you're speaking about?
+```
+
+**Produced:** an investigation of the `internal error` lines in the local dev log. They are not one of the four fixed bugs.
