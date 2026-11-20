@@ -15,6 +15,7 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    setupFiles: ["tests/helpers/setup-globals.ts"],
     // Inline the Agents SDK so the `cloudflare:*` aliases above apply to its imports.
     server: { deps: { inline: [/node_modules\/agents\//, /@cloudflare\/ai-chat/, /partyserver/] } },
     coverage: {
