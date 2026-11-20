@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { authMiddleware } from "@server/middleware/auth";
-import type { Bindings } from "@server/types/env";
+import type { AppEnv, Bindings } from "@server/types/env";
 
 vi.mock("@server/middleware/cf-access", () => ({
   verifyCfAccessJwt: vi.fn(),
@@ -13,12 +13,13 @@ beforeEach(() => {
 });
 
 function createApp() {
-  const app = new Hono<{ Bindings: Bindings }>();
+  const app = new Hono<AppEnv>();
 
   app.use("*", authMiddleware);
 
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.get("/api/zones", (c) => c.json({ zones: [] }));
+  app.get("/api/whoami", (c) => c.json({ identity: c.get("identity") ?? null }));
 
   return app;
 }
@@ -313,5 +314,34 @@ describe("authMiddleware", () => {
       env({ APP_SECRET: "secret123", ENVIRONMENT: "production" })
     );
     expect(verifyCfAccessJwt).not.toHaveBeenCalled();
+  });
+  describe("identity", () => {
+    async function whoami(headers: Record<string, string>, e: Bindings, base = "https://example.com") {
+      const res = await createApp().request(req("/api/whoami", { headers }, base), {}, e);
+      return { status: res.status, body: (await res.json()) as { identity: string | null } };
+    }
+
+    it("sets local-dev for dev bypass", async () => {
+      const r = await whoami({}, env(), "http://localhost");
+      expect(r.body.identity).toBe("local-dev");
+    });
+
+    it("sets lower-cased Access email, falling back to sub then common_name", async () => {
+      const h = { "Cf-Access-Jwt-Assertion": "t" };
+      vi.mocked(verifyCfAccessJwt).mockResolvedValueOnce({ email: "User@Example.COM", sub: "s" });
+      expect((await whoami(h, env(cfAccessEnv))).body.identity).toBe("user@example.com");
+      vi.mocked(verifyCfAccessJwt).mockResolvedValueOnce({ sub: "Sub-1" });
+      expect((await whoami(h, env(cfAccessEnv))).body.identity).toBe("sub-1");
+      vi.mocked(verifyCfAccessJwt).mockResolvedValueOnce({ sub: "", common_name: "Tok.Access" });
+      expect((await whoami(h, env(cfAccessEnv))).body.identity).toBe("tok.access");
+    });
+
+    it("sets service-token for APP_SECRET bearer", async () => {
+      const r = await whoami(
+        { Authorization: "Bearer secret123" },
+        env({ APP_SECRET: "secret123", ENVIRONMENT: "production" }),
+      );
+      expect(r.body.identity).toBe("service-token");
+    });
   });
 });
