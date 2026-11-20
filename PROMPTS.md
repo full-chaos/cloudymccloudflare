@@ -102,3 +102,11 @@ But I also approved the create prompt again, so delete that record and then I th
 ```
 
 **Produced:** confirmed the approved create ran once and the agent replied "The DNS record was created." Deleted that agent-test record. Noted the local-dev `internal error` log lines as an open item in the PR.
+
+## 7
+
+```text
+Let's merge it.
+```
+
+**Produced:** fixed CI (Node 20 has no global `WebSocket`, which the Agents SDK needs at import time in tests), marked the PR ready and merged it.
