@@ -87,6 +87,15 @@ async function resolveGroup(deps: ToolDeps, query: string): Promise<Group> {
   return group;
 }
 
+// Llama 3.3 often sends booleans and numbers as strings ("false", "3600"); accept both forms.
+const looseBoolean = z
+  .union([z.boolean(), z.enum(["true", "false"])])
+  .transform((v) => v === true || v === "true");
+
+const looseInt = z
+  .union([z.number().int(), z.string().regex(/^\d+$/)])
+  .transform((v) => Number(v));
+
 const rangeSchema = z
   .enum(["24h", "7d", "30d"])
   .optional()
@@ -194,11 +203,11 @@ export function createZoneTools(deps: ToolDeps) {
     get_deployment_log: tool({
       description: "Get the most recent WAF rule deployments made from this app.",
       inputSchema: z.object({
-        limit: z.number().int().min(1).max(50).optional().describe("How many entries. Default 20."),
+        limit: looseInt.optional().describe("How many entries, 1-50. Default 20."),
       }),
       execute: ({ limit }) =>
         safely("get_deployment_log", async () => {
-          const entries = await getDeploymentLog(deps.db, limit ?? 20);
+          const entries = await getDeploymentLog(deps.db, Math.min(Math.max(limit ?? 20, 1), 50));
           return {
             entries: entries.map((e) => ({
               zone: e.zoneName,
@@ -295,9 +304,9 @@ export function createZoneTools(deps: ToolDeps) {
         type: z.enum(DNS_RECORD_TYPES),
         name: z.string().describe("Record name, for example www or www.example.com."),
         content: z.string().describe("Record value, for example an IP address or hostname."),
-        proxied: z.boolean().optional(),
-        ttl: z.number().int().optional().describe("Seconds. 1 means automatic."),
-        priority: z.number().int().optional().describe("Required for MX records."),
+        proxied: looseBoolean.optional(),
+        ttl: looseInt.optional().describe("Seconds. 1 means automatic."),
+        priority: looseInt.optional().describe("Required for MX records."),
       }),
       needsApproval: true,
       execute: ({ zone, ...record }) =>

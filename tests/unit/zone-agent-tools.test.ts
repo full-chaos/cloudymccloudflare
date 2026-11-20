@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Database } from "@server/db";
 import type { CloudflareClient } from "@server/services/cloudflare";
+import type { z } from "zod";
 
 vi.mock("@server/services/group.service", () => ({ listGroups: vi.fn() }));
 vi.mock("@server/services/dns.service", () => ({ createRecord: vi.fn(), getDNSRecords: vi.fn() }));
@@ -287,5 +288,28 @@ describe("error wrapping", () => {
   it("stringifies non-Error throws", async () => {
     vi.mocked(getDeploymentLog).mockRejectedValue("bad");
     expect(await run("get_deployment_log", {})).toEqual({ error: "get_deployment_log failed: bad" });
+  });
+});
+
+describe("input schemas tolerate Llama's stringly-typed arguments", () => {
+  it("create_dns_record coerces 'false' and '3600'", () => {
+    const schema = tools.create_dns_record.inputSchema as unknown as z.ZodType;
+    const parsed = schema.parse({
+      zone: "example.com",
+      type: "TXT",
+      name: "t",
+      content: "hello",
+      proxied: "false",
+      ttl: "3600",
+    }) as { proxied: boolean; ttl: number };
+    expect(parsed.proxied).toBe(false);
+    expect(parsed.ttl).toBe(3600);
+  });
+
+  it("create_dns_record still rejects non-numeric ttl", () => {
+    const schema = tools.create_dns_record.inputSchema as unknown as z.ZodType;
+    expect(() =>
+      schema.parse({ zone: "example.com", type: "TXT", name: "t", content: "x", ttl: "soon" }),
+    ).toThrow();
   });
 });
