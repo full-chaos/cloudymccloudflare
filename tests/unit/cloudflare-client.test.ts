@@ -156,6 +156,23 @@ describe("CloudflareClient", () => {
       expect(ruleset.rules).toEqual([]);
       expect(ruleset.phase).toBe("http_request_firewall_custom");
     });
+
+    it("returns [] when Cloudflare omits rules on an empty custom ruleset", async () => {
+      const ok = (result: unknown) => ({
+        status: 200,
+        ok: true,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ success: true, result, errors: [], messages: [] }),
+      });
+      globalThis.fetch = vi
+        .fn()
+        .mockResolvedValueOnce(ok([{ id: "rs1", phase: "http_request_firewall_custom", kind: "zone" }]))
+        .mockResolvedValueOnce(ok({ id: "rs1", phase: "http_request_firewall_custom", kind: "zone", name: "x" }));
+
+      const ruleset = await client.getCustomWAFRules("z1");
+      expect(ruleset.id).toBe("rs1");
+      expect(ruleset.rules).toEqual([]);
+    });
   });
 
   describe("batchZoneOperation", () => {
