@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
-import type { Bindings } from "../types/env";
+import type { AppEnv, Bindings } from "../types/env";
+import type { JWTPayload } from "jose";
 import { verifyCfAccessJwt } from "./cf-access";
 
 const PLACEHOLDER_SECRET = "your_app_secret_here";
@@ -47,7 +48,17 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
+// Access service-token JWTs carry an empty `sub` and a `common_name` instead.
+function accessIdentity(payload: JWTPayload): string {
+  const candidates = [payload.email, payload.sub, payload.common_name];
+  const found = candidates.find((v): v is string => typeof v === "string" && v.length > 0);
+  return (found ?? "access-unknown").toLowerCase();
+}
+
+export const LOCAL_DEV_IDENTITY = "local-dev";
+export const SERVICE_TOKEN_IDENTITY = "service-token";
+
+export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const requestUrl = new URL(c.req.url);
   const path = requestUrl.pathname;
   if (path === "/api/health") {
@@ -57,6 +68,7 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (
   // Local dev browser traffic never injects Authorization headers. This bypass
   // is explicit and non-production-only; hostname alone is not trusted.
   if (isLocalAuthBypassActive(c.env, requestUrl.hostname)) {
+    c.set("identity", LOCAL_DEV_IDENTITY);
     return next();
   }
 
@@ -67,6 +79,7 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (
 
   // Explicit local/dev bypass: outside production AND no auth mechanism configured.
   if (!isProduction && !cfAccessConfigured && !secretConfigured && isDevAuthBypassEnabled(c.env)) {
+    c.set("identity", LOCAL_DEV_IDENTITY);
     return next();
   }
 
@@ -89,6 +102,7 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (
     if (cfJwt) {
       const payload = await verifyCfAccessJwt(cfJwt, TEAM_DOMAIN, POLICY_AUD);
       if (payload) {
+        c.set("identity", accessIdentity(payload));
         return next();
       }
     }
@@ -99,6 +113,7 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Bindings }> = async (
   if (secretConfigured) {
     const authHeader = c.req.header("Authorization");
     if (authHeader?.startsWith("Bearer ") && timingSafeEqual(authHeader.slice(7), APP_SECRET)) {
+      c.set("identity", SERVICE_TOKEN_IDENTITY);
       return next();
     }
   }

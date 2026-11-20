@@ -1,7 +1,7 @@
 import type { ErrorHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import type { Bindings } from "../types/env";
+import type { AppEnv } from "../types/env";
 import { CloudflareApiError } from "../services/cloudflare";
 
 /**
@@ -16,7 +16,7 @@ function toErrorStatus(
   return (status >= 400 && status < 600 ? status : fallback) as ContentfulStatusCode;
 }
 
-export const errorHandler: ErrorHandler<{ Bindings: Bindings }> = (err, c) => {
+export const errorHandler: ErrorHandler<AppEnv> = (err, c) => {
   console.error("[ErrorHandler]", err.message, err.stack);
   const isProduction = c.env?.ENVIRONMENT === "production";
 

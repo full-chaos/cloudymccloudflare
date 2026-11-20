@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
-import type { Bindings } from "./types/env";
+import type { AppEnv, Bindings } from "./types/env";
 import { authMiddleware } from "./middleware/auth";
 import { errorHandler } from "./middleware/errorHandler";
 import { rateLimit } from "./middleware/rateLimit";
@@ -12,8 +12,11 @@ import groups from "./routes/groups";
 import security from "./routes/security";
 import templates from "./routes/templates";
 import analytics from "./routes/analytics";
+import { AGENT_BASE_PATH, handleAgentRequest } from "./agent/route";
 
-export const app = new Hono<{ Bindings: Bindings }>();
+export { ZoneAgent } from "./agent/zone-agent";
+
+export const app = new Hono<AppEnv>();
 
 // ─── Global Middleware ────────────────────────────────────────────────────────
 
@@ -55,6 +58,10 @@ app.route("/api/groups", groups);
 app.route("/api/security", security);
 app.route("/api/templates", templates);
 app.route("/api/analytics", analytics);
+
+// ZoneAgent chat (WebSocket + HTTP). Mounted under /api/* so authMiddleware runs first.
+app.all(AGENT_BASE_PATH, handleAgentRequest);
+app.all(`${AGENT_BASE_PATH}/*`, handleAgentRequest);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 
