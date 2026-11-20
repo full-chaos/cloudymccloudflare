@@ -21,7 +21,7 @@
   "dependencies": {
     "@ai-sdk/react": "^4.0.181",
     "@cloudflare/ai-chat": "^0.12.2",
-    "agents": "^0.33.0",
+    "agents": "^0.34.0",
     "ai": "^7.0.177",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.13.19",
