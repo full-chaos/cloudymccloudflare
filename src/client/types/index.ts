@@ -30,7 +30,7 @@ export type {
   AnalyticsScope,
 } from "../../shared/types";
 
-export type ViewType = "dashboard" | "groups" | "dns" | "security" | "templates" | "analytics";
+export type ViewType = "dashboard" | "groups" | "dns" | "security" | "templates" | "analytics" | "chat";
 
 export type ToastType = "success" | "error" | "warning" | "info";
 
