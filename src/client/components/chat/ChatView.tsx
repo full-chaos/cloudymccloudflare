@@ -28,7 +28,9 @@ function ToolCallLine({ part, onApproval }: { part: ToolPart; onApproval: Approv
   if (part.state === "approval-requested") {
     return (
       <div className="my-2 rounded-lg border border-accent/40 bg-accent-dim p-3">
-        <p className="text-xs font-display text-text-secondary mb-1">Approval needed</p>
+        <p className="text-xs font-display text-text-secondary mb-1">
+          Approve this change? It creates a new DNS record on Cloudflare.
+        </p>
         <p className="text-sm font-mono text-text-primary break-words">{label}</p>
         <div className="flex gap-2 mt-3">
           <button
