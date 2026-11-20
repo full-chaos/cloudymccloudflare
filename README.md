@@ -68,7 +68,7 @@ Try: "Which zones have the most 5xx errors this week?", "Show the DNS records fo
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22+ (required by Wrangler 4.90)
 - A Cloudflare account with zones
 - A Cloudflare API token (see [Token Setup](#api-token-setup))
 - Wrangler CLI (`npm install -g wrangler` or use via npx)
