@@ -110,3 +110,11 @@ Let's merge it.
 ```
 
 **Produced:** fixed CI (Node 20 has no global `WebSocket`, which the Agents SDK needs at import time in tests), marked the PR ready and merged it.
+
+## 8
+
+```text
+I admin merged.
+```
+
+**Produced:** synced local `main` with the merged PR #52, removed the local coverage output, and opened this follow-up PR to record the prompt.
