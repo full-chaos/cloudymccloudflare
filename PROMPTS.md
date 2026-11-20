@@ -74,3 +74,21 @@ So I assume that's the erro you're speaking about?
 ```
 
 **Produced:** an investigation of the `internal error` lines in the local dev log. They are not one of the four fixed bugs.
+
+## 4
+
+```text
+[Image #2: screenshot of the chat. "Create a TXT record named agent-test on chaosispeace.com with content hello" shows one successful create_dns_record, then a second identical call that failed with "[81058] An identical record already exists".]
+```
+
+**Produced:** a guard so a record created earlier in the same request is skipped without a second approval or API call, and a prompt rule to call create_dns_record once per record. It also rounds the cache hit ratio in analytics answers.
+
+## 5
+
+```text
+[Image #3: screenshot of the chat. "Delete the TXT record you just created" and "Delete the TXT record named agent-test on chaosispeace.com with content hello" each led to create_dns_record calls; one created an extra record agent-test TXT "@".]
+
+Delete fails though.
+```
+
+**Produced:** deleted both test records (agent-test TXT "hello" and TXT "@") on chaosispeace.com through the app's DNS API. The agent now refuses delete, update and WAF-change requests and points to the DNS Records or Security Rules page. The tool description and approval card now say clearly that approving creates a new record.
