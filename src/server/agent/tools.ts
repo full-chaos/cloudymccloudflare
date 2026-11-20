@@ -297,6 +297,7 @@ export function createZoneTools(deps: ToolDeps) {
         content: z.string().describe("Record value, for example an IP address or hostname."),
         proxied: z.boolean().optional(),
         ttl: z.number().int().optional().describe("Seconds. 1 means automatic."),
+        priority: z.number().int().optional().describe("Required for MX records."),
       }),
       needsApproval: true,
       execute: ({ zone, ...record }) =>
