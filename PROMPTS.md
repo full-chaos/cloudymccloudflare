@@ -92,3 +92,13 @@ Delete fails though.
 ```
 
 **Produced:** deleted both test records (agent-test TXT "hello" and TXT "@") on chaosispeace.com through the app's DNS API. The agent now refuses delete, update and WAF-change requests and points to the DNS Records or Security Rules page. The tool description and approval card now say clearly that approving creates a new record.
+
+## 6
+
+```text
+Only saw these after the dev reload: [ERROR] Error: internal error; reference = kdp2qmmfq8gkmmaqqa187ioc
+
+But I also approved the create prompt again, so delete that record and then I think we're done.
+```
+
+**Produced:** confirmed the approved create ran once and the agent replied "The DNS record was created." Deleted that agent-test record. Noted the local-dev `internal error` log lines as an open item in the PR.
