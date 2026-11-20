@@ -4,6 +4,56 @@ Multi-zone Cloudflare management dashboard. Manage DNS records, WAF/security rul
 
 <img width="1031" height="753" alt="Safari 2026-02-26 13 20 45" src="https://github.com/user-attachments/assets/29269fe2-df79-4924-9f0a-408991734f7a" />
 
+## AI agent: "Ask about my zones"
+
+A chat agent that answers questions about this account's zones from live data: DNS records, zone groups, WAF rules, the deployment log and traffic analytics. It can also create one DNS record, but only after you click **Approve**.
+
+### Assignment mapping
+
+| Part | What this repo uses | Code |
+| ---- | ------------------- | ---- |
+| LLM | Workers AI, Llama 3.3 70B (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`), streamed through `workers-ai-provider` + AI SDK | [`src/server/agent/zone-agent.ts`](src/server/agent/zone-agent.ts) |
+| Workflow / coordination | A Worker (Hono) routes each user to one `ZoneAgent` Durable Object. The agent runs a multi-step tool loop over the existing services. A cron trigger backfills analytics into D1 every 15 minutes. | [`src/server/index.ts`](src/server/index.ts), [`src/server/agent/route.ts`](src/server/agent/route.ts), [`src/server/agent/tools.ts`](src/server/agent/tools.ts), [`src/server/services/analytics-backfill.service.ts`](src/server/services/analytics-backfill.service.ts) |
+| User input (chat) | The "Ask AI" view in the React SPA, served as Workers static assets. It uses `useAgentChat` over a WebSocket, streams tokens, shows tool calls and the approval prompt. | [`src/client/components/chat/ChatView.tsx`](src/client/components/chat/ChatView.tsx), [`src/client/hooks/useZoneAgentChat.ts`](src/client/hooks/useZoneAgentChat.ts) |
+| Memory / state | Chat history is stored in each agent's built-in Durable Object SQLite, so it survives page reloads. Zones, groups, analytics and the deployment log live in D1. | `ZoneAgent` (`AIChatAgent`), [`src/server/db/schema.ts`](src/server/db/schema.ts) |
+
+### Architecture
+
+```mermaid
+flowchart LR
+  B[Browser: React SPA, Ask AI view] -- "WebSocket /api/agent" --> W[Worker: Hono]
+  W -- "authMiddleware: Access JWT or dev bypass" --> W
+  W -- "getAgentByName(sha256(identity))" --> A[ZoneAgent Durable Object<br/>SQLite: chat history]
+  A -- "streamText + tools" --> L[Workers AI<br/>Llama 3.3 70B]
+  A -- "tools wrap existing services" --> S[group / dns / security / analytics services]
+  S --> D[(D1: zones, groups,<br/>analytics, deploy log)]
+  S --> CF[Cloudflare API v4]
+  C[Cron every 15 min] --> BF[analytics backfill] --> D
+```
+
+### How it works
+
+- **One agent per user.** `/api/agent` and `/api/agent/*` sit behind the same `authMiddleware` as the rest of `/api/*`. The middleware records the verified identity (Access JWT `email`, or `sub`). The Worker hashes it and calls `getAgentByName`. The browser cannot pick the instance name. Requests without valid auth get a 401 before they reach a Durable Object.
+- **Tools** ([`tools.ts`](src/server/agent/tools.ts)) wrap the existing services and do not reimplement them. Read-only tools: `list_zones`, `list_groups`, `get_dns_records`, `get_waf_rules` (zone or group), `get_deployment_log`, `get_traffic_analytics`, `get_top_error_zones`. Mutating tool: `create_dns_record`, gated by the SDK's `needsApproval` human-in-the-loop step. Other mutations (DNS update/delete, WAF deploy) are left out on purpose.
+- **Llama-friendly.** Tool schemas are small and flat. Outputs are trimmed to fit the 24k-token context window. A failing tool returns `{ error }` that the model can explain; it does not throw.
+
+### Run it locally
+
+Workers AI always runs on Cloudflare, even in `npm run dev`. So local dev needs Cloudflare credentials that can start a remote preview:
+
+```bash
+npx wrangler login                    # once
+npm run db:migrate:local
+USE_WRANGLER_LOGIN=1 npm run dev      # uses the wrangler login session for the AI binding
+# open http://localhost:5173 → "Ask AI"
+```
+
+- Without `USE_WRANGLER_LOGIN=1`, the dev server uses `CLOUDFLARE_API_TOKEN` (or `CF_API_TOKEN`) from `.dev.vars` for the remote binding. That token then also needs **Workers Scripts: Edit** and **Workers AI: Read**.
+- If your `workers.dev` subdomain is behind Cloudflare Access, the remote preview also needs `CLOUDFLARE_ACCESS_CLIENT_ID` and `CLOUDFLARE_ACCESS_CLIENT_SECRET` (an Access service token) in your shell, or run `npm run dev` in an interactive terminal.
+- No new `.dev.vars` entries are required. `ENABLE_DEV_AUTH_BYPASS=true` maps all local requests to one `local-dev` agent.
+
+Try: "Which zones have the most 5xx errors this week?", "Show the DNS records for example.com", "What WAF rules are deployed on <group>?". Reload the page: the conversation is still there. "Clear history" deletes it.
+
 ## Stack
 
 | Layer    | Technology                                 |
@@ -11,6 +61,7 @@ Multi-zone Cloudflare management dashboard. Manage DNS records, WAF/security rul
 | Frontend | React 19, Tailwind CSS 4, Vite 8           |
 | Backend  | Hono (Cloudflare Workers), Drizzle ORM     |
 | Database | Cloudflare D1 (SQLite)                     |
+| AI       | Workers AI (Llama 3.3), Agents SDK on Durable Objects |
 | Runtime  | Cloudflare Workers (prod), Miniflare (dev) |
 | API      | Cloudflare API v4                          |
 
@@ -160,6 +211,7 @@ All routes are prefixed with `/api`.
 | POST   | `/security/deploy`                | Batch deploy to zones/groups            |
 | GET    | `/security/deployments`           | Deployment audit log                    |
 | GET    | `/templates`                      | List built-in rule templates            |
+| WS/ALL | `/agent`, `/agent/*`              | ZoneAgent chat (per-user Durable Object) |
 
 ## Database Schema (D1)
 

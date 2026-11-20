@@ -39,6 +39,7 @@ The #1 source of bugs. Server routes are mounted in `src/server/index.ts`:
 
 ```
 /api/zones     /api/dns     /api/groups     /api/security     /api/templates
+/api/agent     (ZoneAgent chat, forwarded to a per-user Durable Object; client uses useAgent basePath "api/agent")
 ```
 
 Client calls in `src/client/lib/api.ts` must match. The client `BASE_URL` is `/api`, so client paths are relative (e.g., `/dns/${zoneId}` maps to `/api/dns/:zoneId`).
