@@ -19,12 +19,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/react": "^4.0.181",
+    "@ai-sdk/react": "^4.0.184",
     "@cloudflare/ai-chat": "^0.12.2",
     "agents": "^0.34.0",
     "ai": "^7.0.177",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.13.19",
+    "hono": "^4.13.21",
     "jose": "^6.2.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.36.4",
-    "@cloudflare/workers-types": "^5.20261120.1",
+    "@cloudflare/workers-types": "^5.20261123.1",
     "@tailwindcss/postcss": "^4.3.0",
     "@types/node": "^26.6.6",
     "@types/react": "^19.2.14",
@@ -54,6 +54,6 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.1",
-    "wrangler": "^4.165.0"
+    "wrangler": "^4.166.0"
   }
 }
