@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import type { Zone, Group, DNSRecord, CreateDNSInput } from "../../types";
+import type { Zone, Group, DNSRecord, CreateDNSInput, UpdateDNSInput } from "../../types";
 import type { ToastType } from "../../types";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { EmptyState } from "../shared/EmptyState";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
-import { AddRecordForm } from "./AddRecordForm";
-import { DNSRecordsTable } from "./DNSRecordsTable";
+import { Modal } from "../shared/Modal";
+import { AddRecordForm, changedFields, recordToInput } from "./AddRecordForm";
+import { DNSRecordsTable, filterRecords } from "./DNSRecordsTable";
 
 interface DNSViewProps {
   zones: Zone[];
@@ -19,6 +20,7 @@ interface DNSViewProps {
   onSelectZone: (zoneId: string) => void;
   onCreateRecord: (zoneId: string, input: CreateDNSInput) => Promise<DNSRecord>;
   onBatchCreateRecords: (zoneIds: string[], input: CreateDNSInput) => Promise<void>;
+  onUpdateRecord: (zoneId: string, recordId: string, input: UpdateDNSInput) => Promise<DNSRecord>;
   onDeleteRecord: (zoneId: string, recordId: string) => Promise<void>;
   onRetry: () => Promise<void>;
   onClearGroupFilter?: () => void;
@@ -36,6 +38,7 @@ export function DNSView({
   onSelectZone,
   onCreateRecord,
   onBatchCreateRecords,
+  onUpdateRecord,
   onDeleteRecord,
   onRetry,
   onClearGroupFilter,
@@ -46,6 +49,10 @@ export function DNSView({
   const [addingRecord, setAddingRecord] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DNSRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editTarget, setEditTarget] = useState<DNSRecord | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState("");
+  const visibleRecords = filterRecords(records, query);
 
   const currentZone = zones.find((z) => z.id === currentZoneId);
   const activeGroup = activeGroupId ? groups.find((g) => g.id === activeGroupId) : null;
@@ -75,6 +82,25 @@ export function DNSView({
       onToast(err instanceof Error ? err.message : "Failed to add record", "error");
     } finally {
       setAddingRecord(false);
+    }
+  }
+
+  async function handleUpdateRecord(input: CreateDNSInput) {
+    if (!editTarget || !currentZoneId) return;
+    const patch = changedFields(editTarget, input);
+    if (Object.keys(patch).length === 0) {
+      setEditTarget(null);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onUpdateRecord(currentZoneId, editTarget.id, patch);
+      onToast("DNS record updated", "success");
+      setEditTarget(null);
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : "Failed to update record", "error");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -224,9 +250,21 @@ export function DNSView({
               DNS Records
             </h3>
             {!loadingRecords && (
-              <span className="text-[10px] font-mono text-text-muted">
-                {records.length} record{records.length !== 1 ? "s" : ""}
-              </span>
+              <div className="flex items-center gap-3">
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter records..."
+                  aria-label="Filter DNS records"
+                  className="px-2 py-1 text-xs bg-bg-primary border border-border rounded text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent/50 font-mono"
+                />
+                <span className="text-[10px] font-mono text-text-muted">
+                  {query.trim()
+                    ? `${visibleRecords.length} of ${records.length}`
+                    : `${records.length} record${records.length !== 1 ? "s" : ""}`}
+                </span>
+              </div>
             )}
           </div>
 
@@ -254,10 +292,28 @@ export function DNSView({
               description="Select a zone from the left panel to view its DNS records."
             />
           ) : (
-            <DNSRecordsTable records={records} onDelete={setDeleteTarget} />
+            <DNSRecordsTable
+              records={visibleRecords}
+              onEdit={setEditTarget}
+              onDelete={setDeleteTarget}
+            />
           )}
         </div>
       </div>
+
+      {/* Edit record */}
+      <Modal isOpen={editTarget !== null} onClose={() => setEditTarget(null)} title="Edit DNS Record">
+        {editTarget && (
+          <AddRecordForm
+            key={editTarget.id}
+            initial={recordToInput(editTarget)}
+            title={`${editTarget.type} ${editTarget.name}`}
+            submitLabel="Save Changes"
+            onSubmit={handleUpdateRecord}
+            loading={saving}
+          />
+        )}
+      </Modal>
 
       {/* Delete confirm */}
       <ConfirmDialog

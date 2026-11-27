@@ -48,6 +48,7 @@ export default function App() {
     currentZoneId,
     fetchRecords,
     createRecord,
+    updateRecord,
     deleteRecord,
     batchCreateRecords,
     refresh: refreshRecords,
@@ -183,6 +184,7 @@ export default function App() {
             onSelectZone={handleSelectZone}
             onCreateRecord={handleCreateRecord}
             onBatchCreateRecords={batchCreateRecords}
+            onUpdateRecord={updateRecord}
             onDeleteRecord={handleDeleteRecord}
             onRetry={refreshRecords}
             onClearGroupFilter={handleClearGroupFilter}
