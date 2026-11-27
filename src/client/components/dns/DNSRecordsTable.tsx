@@ -4,14 +4,24 @@ import { DNSTypeBadge } from "./DNSTypeBadge";
 
 export interface DNSRecordsTableProps {
   records: DNSRecord[];
+  onEdit: (record: DNSRecord) => void;
   onDelete: (record: DNSRecord) => void;
+}
+
+/** Case-insensitive match on type, name or content. Empty query keeps everything. */
+export function filterRecords(records: DNSRecord[], query: string): DNSRecord[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return records;
+  return records.filter((r) =>
+    [r.type, r.name, r.content].some((v) => v.toLowerCase().includes(q))
+  );
 }
 
 function isOptimisticRecord(id: string): boolean {
   return id.startsWith("optimistic-");
 }
 
-export function DNSRecordsTable({ records, onDelete }: DNSRecordsTableProps) {
+export function DNSRecordsTable({ records, onEdit, onDelete }: DNSRecordsTableProps) {
   if (records.length === 0) {
     return (
       <EmptyState
@@ -88,12 +98,24 @@ export function DNSRecordsTable({ records, onDelete }: DNSRecordsTableProps) {
                     {record.ttl === 1 ? "Auto" : record.ttl}
                   </span>
                 </td>
-                <td className="py-2.5 px-3">
+                <td className="py-2.5 px-3 whitespace-nowrap">
+                  <button
+                    onClick={() => onEdit(record)}
+                    disabled={pending}
+                    className="text-text-muted hover:text-accent transition-colors p-1 rounded hover:bg-accent/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title={pending ? "Saving..." : "Edit record"}
+                    aria-label="Edit record"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z" />
+                    </svg>
+                  </button>
                   <button
                     onClick={() => onDelete(record)}
                     disabled={pending}
                     className="text-text-muted hover:text-red-400 transition-colors p-1 rounded hover:bg-red-400/10 disabled:opacity-40 disabled:cursor-not-allowed"
                     title={pending ? "Saving..." : "Delete record"}
+                    aria-label="Delete record"
                   >
                     <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
                       <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z" />
